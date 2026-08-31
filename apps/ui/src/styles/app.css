@@ -486,8 +486,8 @@ tbody .row > td .sub {
   display: block; max-width: 100%;
 }
 tbody .row > td .sub { line-height: 1.2; }
-tr.spacer { height: 0; }
-tr.spacer td { padding: 0; border: 0; }
+/* Height comes from the inline style; these rows reserve the scroll extent. */
+tr.spacer td { padding: 0; border: 0; height: inherit; }
 
 /* the app logo in the sidebar */
 .brand-logo {

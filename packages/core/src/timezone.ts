@@ -1,3 +1,4 @@
+import type { CallingWindow } from './store/preferences';
 /**
  * State -> IANA timezone. She is calling US offices from another continent,
  * so knowing the local hour at the other end is not a nicety.
@@ -92,14 +93,36 @@ export function localTimeAt(tz: string | null, at: Date = new Date()): string | 
   return f ? f.format(at) : null;
 }
 
-/** Is it inside plausible US office hours (9-5, Mon-Fri) at that location? */
-export function isOfficeHours(tz: string | null, at: Date = new Date()): boolean | null {
+const WEEKDAY_INDEX: Record<string, number> = {
+  Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6,
+};
+
+/**
+ * Is the practice inside the operator's calling window right now?
+ *
+ * The window is supplied rather than fixed (KTD6) — a 9-5 Mon-Fri assumption
+ * is wrong for anyone whose own working day differs from the one they are
+ * calling into.
+ *
+ * A window whose end is not after its start (a wrapping overnight window) is
+ * treated as closed rather than inverted, so the caller never receives a
+ * confident wrong answer.
+ */
+export function isOfficeHours(
+  tz: string | null,
+  window: CallingWindow,
+  at: Date = new Date(),
+): boolean | null {
   if (!tz) return null;
   const f = partsFor(tz);
   if (!f) return null;
+  if (!(window.endHour > window.startHour)) return false;
+
   const parts = f.formatToParts(at);
   const hour = Number(parts.find((p) => p.type === 'hour')?.value ?? -1);
-  const day = parts.find((p) => p.type === 'weekday')?.value ?? '';
-  if (day === 'Sat' || day === 'Sun') return false;
-  return hour >= 9 && hour < 17;
+  const dayName = parts.find((p) => p.type === 'weekday')?.value ?? '';
+  const day = WEEKDAY_INDEX[dayName];
+
+  if (day === undefined || !window.days.includes(day)) return false;
+  return hour >= window.startHour && hour < window.endHour;
 }

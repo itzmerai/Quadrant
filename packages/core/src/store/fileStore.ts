@@ -1,4 +1,4 @@
-import type { Lead, Territory } from '../types';
+import { normalizeCallStatus, type Lead, type Territory } from '../types';
 import type { FsAdapter, MergeReport, TerritoryStore } from './types';
 
 /**
@@ -77,7 +77,10 @@ export function createFileStore(fs: FsAdapter): TerritoryStore {
     },
 
     async getLeads(territoryId) {
-      return readJson<Lead[]>(leadsPath(territoryId), []);
+      const leads = await readJson<Lead[]>(leadsPath(territoryId), []);
+      // Statuses from earlier builds resolve to their replacement rather than
+      // rendering as an unknown pill.
+      return leads.map((l) => ({ ...l, callStatus: normalizeCallStatus(l.callStatus) }));
     },
 
     async saveLeads(territoryId, leads) {

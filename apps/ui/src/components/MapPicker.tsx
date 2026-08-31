@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { BBox, Territory } from '@quadrant/core';
-import { bboxFromCorners } from '@quadrant/core';
+import { bboxFromCorners, territoryHex } from '@quadrant/core';
 
 interface Props {
   territories: Territory[];
@@ -10,23 +10,44 @@ interface Props {
   drawing: boolean;
   onDrawn: (bbox: BBox) => void;
   onSelect: (id: string) => void;
+  /** Height as a percentage of the main pane, driven by the resize handle. */
+  heightPct: number;
+  theme: 'light' | 'dark';
+  onClose: () => void;
 }
 
-const STYLE_IDLE: L.PathOptions = {
-  color: '#5B7FC7', weight: 1.5, fillColor: '#5B7FC7', fillOpacity: 0.06,
-};
-const STYLE_SELECTED: L.PathOptions = {
-  color: '#1F5FD0', weight: 2.5, fillColor: '#1F5FD0', fillOpacity: 0.12,
-};
 const STYLE_DRAFT: L.PathOptions = {
   color: '#1F5FD0', weight: 2, dashArray: '6 4', fillColor: '#1F5FD0', fillOpacity: 0.1,
 };
 
-export function MapPicker({ territories, selectedId, drawing, onDrawn, onSelect }: Props) {
+
+const OSM_ATTRIB = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+
+/**
+ * Standard OpenStreetMap tiles, dark-themed with a CSS filter.
+ *
+ * Third-party "free" basemaps did not survive contact: Stadia returns 401
+ * without a key, and CARTO returns HTTP 200 but stamps every tile with
+ * "API KEY REQUIRED". A status-code probe cannot tell those apart from real
+ * keyless access — only looking at the rendered tile can.
+ *
+ * OSM's own tiles are the one source this app has actually run against for
+ * real, so the dark variant is produced locally (see `.theme-dark .map-canvas`
+ * in layout.css) rather than by trusting another provider's free tier.
+ */
+function makeTileLayer(): L.TileLayer {
+  return L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: OSM_ATTRIB,
+  });
+}
+
+export function MapPicker({ territories, selectedId, drawing, onDrawn, onSelect, heightPct, theme, onClose }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const layerRef = useRef<L.LayerGroup | null>(null);
   const draftRef = useRef<L.Rectangle | null>(null);
+  const tileRef = useRef<L.TileLayer | null>(null);
 
   // Latest values, readable from Leaflet handlers bound once.
   const drawingRef = useRef(drawing);
@@ -45,10 +66,7 @@ export function MapPicker({ territories, selectedId, drawing, onDrawn, onSelect 
       attributionControl: true,
     });
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '&copy; OpenStreetMap contributors',
-    }).addTo(map);
+    tileRef.current = makeTileLayer().addTo(map);
 
     layerRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
@@ -97,6 +115,14 @@ export function MapPicker({ territories, selectedId, drawing, onDrawn, onSelect 
     };
   }, []);
 
+  /* --- height changes need Leaflet told, or tiles render against stale size --- */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const id = window.setTimeout(() => map.invalidateSize(), 60);
+    return () => window.clearTimeout(id);
+  }, [heightPct]);
+
   /* --- draw mode toggles map panning and the cursor --- */
   useEffect(() => {
     const map = mapRef.current;
@@ -128,7 +154,14 @@ export function MapPicker({ territories, selectedId, drawing, onDrawn, onSelect 
         [t.bbox.north, t.bbox.east],
       );
       const selected = t.id === selectedId;
-      const rect = L.rectangle(bounds, selected ? STYLE_SELECTED : STYLE_IDLE);
+      const hex = territoryHex(t.color, theme);
+      // Selection reads as weight and fill, so the hue stays the box's identity.
+      const rect = L.rectangle(bounds, {
+        color: hex,
+        weight: selected ? 3 : theme === 'dark' ? 2 : 1.5,
+        fillColor: hex,
+        fillOpacity: selected ? 0.18 : 0.07,
+      });
       rect.on('click', () => onSelect(t.id));
       rect.bindTooltip(t.name + ' · ' + t.leadCount + ' leads', {
         permanent: false,
@@ -136,7 +169,7 @@ export function MapPicker({ territories, selectedId, drawing, onDrawn, onSelect 
       });
       layer.addLayer(rect);
     }
-  }, [territories, selectedId, onSelect]);
+  }, [territories, selectedId, onSelect, theme]);
 
   /* --- fly to the selected box --- */
   useEffect(() => {
@@ -159,7 +192,7 @@ export function MapPicker({ territories, selectedId, drawing, onDrawn, onSelect 
   }
 
   return (
-    <div className="map-host">
+    <div className={'map-host theme-' + theme} style={{ height: heightPct + '%' }}>
       <div ref={hostRef} className="map-canvas" />
       {drawing && (
         <div className="map-hint" role="status">
@@ -167,9 +200,14 @@ export function MapPicker({ territories, selectedId, drawing, onDrawn, onSelect 
           the provider registry is US-only
         </div>
       )}
-      <button className="map-home" onClick={goHome} title="Jump back to the United States">
-        Show US
-      </button>
+      <div className="map-controls">
+        <button className="map-btn" onClick={goHome} title="Jump back to the United States">
+          Show US
+        </button>
+        <button className="map-btn" onClick={onClose} title="Hide the map and give the space to the lead list">
+          Hide map
+        </button>
+      </div>
     </div>
   );
 }

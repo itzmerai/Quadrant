@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   CancelToken,
   areaKm2,
@@ -10,6 +10,7 @@ import {
   crawlForEmails,
   suggestFilename,
   zipsInBBox,
+  territoryHex,
   type BBox,
   type Lead,
   type ScanProgress,
@@ -23,9 +24,13 @@ import {
 
 
 import { MapPicker } from './components/MapPicker';
+import { MapResizer } from './components/MapResizer';
+import { SettingsPanel } from './components/SettingsPanel';
 import { NameBoxDialog } from './components/NameBoxDialog';
 import { LeadTable } from './components/LeadTable';
+import { TerritoryMenu } from './components/TerritoryMenu';
 import { getFs, getHttp, STORAGE_LABEL } from './lib/runtime';
+import { usePreferences } from './lib/PreferencesContext';
 
 export default function App() {
   // 42k ZIP centroids. Served as a static asset rather than inlined into the
@@ -38,6 +43,13 @@ export default function App() {
   const [leads, setLeads] = useState<Lead[]>([]);
   // What the table is actually showing, so Export matches the screen.
   const [visible, setVisible] = useState<Lead[]>([]);
+
+  const { prefs, update, resolvedTheme } = usePreferences();
+  const mainRef = useRef<HTMLElement | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  // Tracked separately from the stored value so the drag stays smooth and only
+  // the released height is persisted.
+  const [mapHeightPct, setMapHeightPct] = useState(prefs.mapHeightPct);
 
   const [drawing, setDrawing] = useState(false);
   const [pendingBox, setPendingBox] = useState<BBox | null>(null);
@@ -72,6 +84,23 @@ export default function App() {
   }, [store, selectedId]);
 
   const selected = territories.find((t) => t.id === selectedId) ?? null;
+
+  // 42k-row scan; recompute only when the box or the index actually changes.
+  const selectedZipCount = useMemo(
+    () => (selected ? zipsInBBox(zipIndex, selected.bbox).length : 0),
+    [zipIndex, selected?.id, selected?.bbox],
+  );
+  const pendingZipCount = useMemo(
+    () => (pendingBox ? zipsInBBox(zipIndex, pendingBox).length : 0),
+    [zipIndex, pendingBox],
+  );
+
+  /** R4 — a closed map cannot be drawn on, so reopen before entering draw mode. */
+  function startDrawing() {
+    if (drawing) { setDrawing(false); return; }
+    if (prefs.mapClosed) update({ mapClosed: false });
+    setDrawing(true);
+  }
 
   /* --- create a named box --- */
   const handleDrawn = useCallback((bbox: BBox) => {
@@ -196,6 +225,12 @@ export default function App() {
     if (next) setLeads((prev) => prev.map((l) => (l.id === leadId ? next : l)));
   }
 
+  async function setTerritoryColor(t: Territory, color: string) {
+    if (!store) return;
+    await store.saveTerritory({ ...t, color });
+    setTerritories(await store.listTerritories());
+  }
+
   async function deleteTerritory(t: Territory) {
     if (!store) return;
     if (!confirm('Delete "' + t.name + '" and all ' + t.leadCount + ' of its leads?')) return;
@@ -220,22 +255,31 @@ export default function App() {
   const scanning = progress != null && ['resolving', 'querying', 'filtering', 'enriching'].includes(progress.phase);
 
   return (
-    <div className="app">
+    <div className={'app' + (prefs.sidebarCollapsed ? ' rail' : '')}>
       <aside className="sidebar">
         <div className="brand">
           <img className="brand-logo" src="/logo.png" alt="" width="30" height="30" />
-          <div>
+          <div className="brand-text">
             <h1>Quadrant</h1>
             <p>{STORAGE_LABEL}</p>
           </div>
+          <button
+            className="rail-toggle"
+            onClick={() => update({ sidebarCollapsed: !prefs.sidebarCollapsed })}
+            title={prefs.sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-label={prefs.sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {prefs.sidebarCollapsed ? '»' : '«'}
+          </button>
         </div>
 
         <button
           className={'btn primary block' + (drawing ? ' active' : '')}
-          onClick={() => setDrawing((d) => !d)}
+          onClick={startDrawing}
           disabled={scanning}
+          title={drawing ? 'Cancel drawing' : 'Draw a new box'}
         >
-          {drawing ? 'Cancel drawing' : '+ New box'}
+          {prefs.sidebarCollapsed ? '+' : drawing ? 'Cancel drawing' : '+ New box'}
         </button>
 
         <div className="terr-head">
@@ -250,11 +294,19 @@ export default function App() {
             </li>
           )}
           {territories.map((t) => (
-            <li key={t.id}>
+            <li
+              key={t.id}
+              className={'terr-row' + (t.id === selectedId ? ' selected' : '')}
+              style={{ ['--terr-color' as string]: territoryHex(t.color, resolvedTheme) }}
+            >
               <button
                 className={'terr' + (t.id === selectedId ? ' selected' : '')}
                 onClick={() => setSelectedId(t.id)}
+                title={t.name + ' · ' + t.leadCount + ' leads'}
               >
+                <span className="terr-initial" aria-hidden="true">
+                  {t.name.trim().charAt(0).toUpperCase() || '?'}
+                </span>
                 <span className="terr-name">{t.name}</span>
                 <span className="terr-meta">
                   {t.leadCount} leads
@@ -263,19 +315,53 @@ export default function App() {
                     : ' · never scanned'}
                 </span>
               </button>
+              <TerritoryMenu
+                colorKey={t.color}
+                theme={resolvedTheme}
+                onPick={(c) => void setTerritoryColor(t, c)}
+                onDelete={() => void deleteTerritory(t)}
+              />
             </li>
           ))}
         </ul>
+
+        <button
+          className="btn settings-btn"
+          onClick={() => setSettingsOpen(true)}
+          title="Settings"
+          aria-label="Settings"
+        >
+          <span className="settings-icon" aria-hidden="true">⚙</span>
+          {!prefs.sidebarCollapsed && <span>Settings</span>}
+        </button>
       </aside>
 
-      <main className="main">
-        <MapPicker
-          territories={territories}
-          selectedId={selectedId}
-          drawing={drawing}
-          onDrawn={handleDrawn}
-          onSelect={setSelectedId}
-        />
+      <main className="main" ref={mainRef}>
+        {!prefs.mapClosed && (
+          <>
+            <MapPicker
+              territories={territories}
+              selectedId={selectedId}
+              drawing={drawing}
+              onDrawn={handleDrawn}
+              onSelect={setSelectedId}
+              heightPct={mapHeightPct}
+              theme={resolvedTheme}
+              onClose={() => update({ mapClosed: true })}
+            />
+            <MapResizer
+              containerRef={mainRef}
+              onResize={setMapHeightPct}
+              onCommit={(pct) => update({ mapHeightPct: pct })}
+            />
+          </>
+        )}
+
+        {prefs.mapClosed && (
+          <button className="map-reopen" onClick={() => update({ mapClosed: false })}>
+            Show map
+          </button>
+        )}
 
         {selected && (
           <div className="detail">
@@ -285,7 +371,7 @@ export default function App() {
                 <p className="coords">
                   {formatBBox(selected.bbox)} · {Math.round(areaKm2(selected.bbox)).toLocaleString()} km²
                   {' · '}
-                  {zipsInBBox(zipIndex, selected.bbox).length} ZIP codes
+                  {selectedZipCount} ZIP codes
                 </p>
               </div>
               <div className="actions">
@@ -349,17 +435,20 @@ export default function App() {
               leads={leads}
               onPatch={patchLead}
               scanned={selected.lastScanAt !== null}
-              zipCount={zipsInBBox(zipIndex, selected.bbox).length}
+              zipCount={selectedZipCount}
               onVisibleChange={setVisible}
             />
           </div>
         )}
       </main>
 
+      {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
+
       {pendingBox && (
         <NameBoxDialog
           bbox={pendingBox}
-          zipCount={zipsInBBox(zipIndex, pendingBox).length}
+          zipCount={pendingZipCount}
+          defaultSpecialties={prefs.defaultSpecialties}
           onCancel={() => setPendingBox(null)}
           onCreate={createTerritory}
         />

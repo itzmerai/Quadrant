@@ -18,3 +18,5 @@ export { dedupeByPhone } from './dedupe';
 export { guessWebsites, candidateDomains, pageBelongsTo } from './enrich/domainGuess';
 export { acceptsMail, guessAddress, domainOf } from './enrich/mx';
 export { decodeCloudflare, decodeObfuscated, findContactForm } from './enrich/email';
+export * from './store/preferences';
+export * from './colors';

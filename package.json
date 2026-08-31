@@ -14,11 +14,14 @@
     "typecheck": "tsc --noEmit -p apps/ui/tsconfig.json",
     "scan": "tsx packages/core/src/cli.ts",
     "desktop": "cd apps/desktop && tauri dev",
-    "desktop:build": "cd apps/desktop && tauri build"
+    "desktop:build": "cd apps/desktop && tauri build",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.1.0",
     "tsx": "^4.23.13",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.9"
   }
 }
