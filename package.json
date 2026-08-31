@@ -1,0 +1,24 @@
+{
+  "name": "quadrant",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Draw a box on the map, get a call sheet of small medical practices inside it.",
+  "type": "module",
+  "workspaces": [
+    "packages/core",
+    "apps/ui"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @quadrant/ui",
+    "build": "npm run build -w @quadrant/ui",
+    "typecheck": "tsc --noEmit -p apps/ui/tsconfig.json",
+    "scan": "tsx packages/core/src/cli.ts",
+    "desktop": "cd apps/desktop && tauri dev",
+    "desktop:build": "cd apps/desktop && tauri build"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.1.0",
+    "tsx": "^4.23.13",
+    "typescript": "^5.9.3"
+  }
+}
