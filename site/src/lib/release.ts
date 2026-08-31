@@ -49,6 +49,17 @@ export interface ReleaseInfo {
   /** True when this came from the API rather than the fallback. */
   live: boolean;
   state: ReleaseState;
+  /**
+   * Whether the installer asset is actually attached to this release.
+   *
+   * A published release is not the same thing as a downloadable one. A tag can
+   * be pushed, or a draft published by hand, before the build that uploads the
+   * binary has finished or succeeded — and `releases/latest/download/<name>`
+   * 404s in that window. Offering a download button then sends people to a
+   * GitHub error page, so every download link is gated on this rather than on
+   * `state === 'live'`.
+   */
+  hasInstaller: boolean;
 }
 
 interface GitHubAsset {
@@ -116,6 +127,7 @@ export async function latestRelease(
     sha256: null,
     live: false,
     state,
+    hasInstaller: false,
   });
 
   let raw: unknown;
@@ -130,7 +142,9 @@ export async function latestRelease(
   const release = raw as GitHubRelease;
   if (!release.tag_name) return fallback('none');
 
-  const sums = (release.assets ?? []).find((a) => a.name === CHECKSUM_ASSET);
+  const assets = release.assets ?? [];
+  const sums = assets.find((a) => a.name === CHECKSUM_ASSET);
+  const hasInstaller = assets.some((a) => a.name === INSTALLER_NAME);
 
   let sha256: string | null = null;
   if (sums?.browser_download_url) {
@@ -149,6 +163,7 @@ export async function latestRelease(
     sha256,
     live: true,
     state: 'live',
+    hasInstaller,
   };
 }
 

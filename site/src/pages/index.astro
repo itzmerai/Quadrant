@@ -1,10 +1,36 @@
 ---
 import Base from '../layouts/Base.astro';
 import LiveDemo from '../components/LiveDemo.astro';
-// The landing page sends people to the download *page*, not straight at the
-// installer — the checksum and the SmartScreen warning belong in front of the
-// file, not behind it.
-import { REPO_URL } from '../lib/release';
+import {
+  DOWNLOAD_URL,
+  REPO_URL,
+  latestRelease,
+  networkFetchers,
+} from '../lib/release';
+
+/** Only used when the GitHub API cannot be read; see download.astro. */
+const FALLBACK_VERSION = '0.1.0';
+
+/**
+ * The hero button links straight at the installer once a release exists, so a
+ * visitor gets the file rather than another page to click through.
+ *
+ * `DOWNLOAD_URL` is GitHub's `releases/latest/download` permalink. GitHub
+ * serves release assets with `Content-Disposition: attachment`, so the browser
+ * saves the file and stays on this page — it does not navigate to github.com.
+ * The `download` attribute is advisory only here (browsers ignore it
+ * cross-origin), which is why the header does the real work.
+ *
+ * Before the first release that permalink 404s to a GitHub error page, so
+ * until one is published the button goes to the download page, which explains
+ * the situation properly. The checksum and the SmartScreen warning still live
+ * there, reachable from the secondary link.
+ */
+const release = await latestRelease(
+  networkFetchers(process.env.GITHUB_TOKEN),
+  FALLBACK_VERSION,
+);
+const canDownloadDirectly = release.state === 'live' && release.hasInstaller;
 
 const base = import.meta.env.BASE_URL;
 const href = (p: string) => (base.endsWith('/') ? base : base + '/') + p.replace(/^\//, '');
@@ -25,15 +51,25 @@ const href = (p: string) => (base.endsWith('/') ? base : base + '/') + p.replace
       </p>
 
       <div class="cta-row">
-        <a class="btn primary" href={href('download/')}>
-          Download for Windows
-        </a>
+        {canDownloadDirectly ? (
+          <a class="btn primary" href={DOWNLOAD_URL} download>
+            Download for Windows
+            <span class="btn-sub">v{release.version} · .exe</span>
+          </a>
+        ) : (
+          <a class="btn primary" href={href('download/')}>
+            Download for Windows
+          </a>
+        )}
         <a class="btn" href={href('guide/')}>How it works</a>
         <a class="btn" href={REPO_URL}>Read the source</a>
       </div>
 
       <p class="muted" style="margin-top:14px;font-size:14px">
         Free. No account, no API key, no subscription. Runs on your machine.
+        {canDownloadDirectly && (
+          <> <a href={href('download/')}>Checksum and requirements</a>.</>
+        )}
       </p>
     </div>
   </section>
@@ -247,7 +283,14 @@ const href = (p: string) => (base.endsWith('/') ? base : base + '/') + p.replace
         before you commit to anything.
       </p>
       <div class="cta-row" style="justify-content:center">
-        <a class="btn primary" href={href('download/')}>Download for Windows</a>
+        {canDownloadDirectly ? (
+          <a class="btn primary" href={DOWNLOAD_URL} download>
+            Download for Windows
+            <span class="btn-sub">v{release.version} · .exe</span>
+          </a>
+        ) : (
+          <a class="btn primary" href={href('download/')}>Download for Windows</a>
+        )}
         <a class="btn" href={REPO_URL}>Read the source</a>
       </div>
     </div>

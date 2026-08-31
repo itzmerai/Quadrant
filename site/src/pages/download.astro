@@ -35,9 +35,16 @@ const href = (p: string) => (base.endsWith('/') ? base : base + '/') + p.replace
  * exists when there is a published release to verify, so it is conditional in
  * both places from the same flag.
  */
+/**
+ * `isLive` means a release exists; `canDownload` means its installer is
+ * actually attached. They differ in a real window — a tag pushed before the
+ * build finishes, or a draft published by hand — and offering the button on
+ * `isLive` alone links straight at a GitHub 404.
+ */
 const isLive = release.state === 'live';
+const canDownload = isLive && release.hasInstaller;
 const sections = [
-  ...(isLive ? [{ id: 'verify', label: 'Verify it first' }] : []),
+  ...(canDownload ? [{ id: 'verify', label: 'Verify it first' }] : []),
   { id: 'smartscreen', label: 'The Windows warning' },
   { id: 'requirements', label: 'System requirements' },
   { id: 'candid', label: 'Know what this is' },
@@ -54,10 +61,10 @@ const sections = [
       <h1>Download Quadrant</h1>
       <p class="lede">Windows 10 and 11 &middot; 64-bit</p>
 
-      {isLive ? (
+      {canDownload ? (
         <>
           <div class="cta-row">
-            <a class="btn primary" href={DOWNLOAD_URL}>
+            <a class="btn primary" href={DOWNLOAD_URL} download>
               Download {INSTALLER_NAME}
               <span class="btn-sub">v{release.version}</span>
             </a>
@@ -71,7 +78,15 @@ const sections = [
         </>
       ) : (
         <div class="note prose" style="margin-top:24px">
-          {release.state === 'none' ? (
+          {isLive ? (
+            <p>
+              <strong>Version {release.version} is tagged, but no installer is
+              attached to it yet.</strong> That usually means the Windows build
+              is still running or did not finish. There is nothing to download
+              at this moment; the releases page will show the file as soon as
+              one is published.
+            </p>
+          ) : release.state === 'none' ? (
             <p>
               <strong>No release has been published yet.</strong> The code is on
               GitHub and can be built from source; there is no installer to

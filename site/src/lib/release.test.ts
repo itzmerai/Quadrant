@@ -212,3 +212,67 @@ describe('networkFetchers', () => {
     expect(seen[1]?.Authorization).toBeUndefined();
   });
 });
+
+/*
+ * A published release is not necessarily a downloadable one. The workflow
+ * uploads Tauri's versioned output *and* a version-free copy, and only the
+ * latter is what `releases/latest/download/Quadrant-setup.exe` resolves. A tag
+ * pushed before the build finishes leaves a release with neither, and linking
+ * the download button off `state === 'live'` sent people to a GitHub 404.
+ */
+describe('hasInstaller', () => {
+  it('is false when the release has no assets at all', async () => {
+    const info = await latestRelease(
+      fetchers({ json: async () => ({ tag_name: 'v0.1.0', published_at: null, assets: [] }) }),
+      FALLBACK,
+    );
+    expect(info.state).toBe('live');
+    expect(info.hasInstaller).toBe(false);
+  });
+
+  it('is false when only the versioned installer is attached', async () => {
+    // The permalink resolves by exact filename, so the versioned name alone
+    // does not make the download link work.
+    const info = await latestRelease(
+      fetchers({
+        json: async () => ({ ...RELEASE, assets: [RELEASE.assets[0]] }),
+        text: async () => `${HASH}  Quadrant_0.2.0_x64-setup.exe`,
+      }),
+      FALLBACK,
+    );
+    expect(info.hasInstaller).toBe(false);
+  });
+
+  it('is true once the version-free copy is attached', async () => {
+    const info = await latestRelease(
+      fetchers({
+        json: async () => ({
+          ...RELEASE,
+          assets: [
+            ...RELEASE.assets,
+            { name: 'Quadrant-setup.exe', browser_download_url: 'https://example.test/free' },
+          ],
+        }),
+        text: async () => `${HASH}  Quadrant_0.2.0_x64-setup.exe`,
+      }),
+      FALLBACK,
+    );
+    expect(info.state).toBe('live');
+    expect(info.hasInstaller).toBe(true);
+  });
+
+  it('is false when nothing is published', async () => {
+    const info = await latestRelease(fetchers({ json: async () => null }), FALLBACK);
+    expect(info.state).toBe('none');
+    expect(info.hasInstaller).toBe(false);
+  });
+
+  it('is false when GitHub is unreachable', async () => {
+    const info = await latestRelease(
+      fetchers({ json: async () => { throw new Error('offline'); } }),
+      FALLBACK,
+    );
+    expect(info.state).toBe('unreachable');
+    expect(info.hasInstaller).toBe(false);
+  });
+});

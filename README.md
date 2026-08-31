@@ -10,7 +10,11 @@
 </p>
 
 <p align="center">
-  <a href="https://itzmerai.github.io/Quadrant/">Website</a> ·
+  <strong><a href="https://itzmerai.github.io/Quadrant/">https://itzmerai.github.io/Quadrant/</a></strong>
+</p>
+
+<p align="center">
+  <a href="https://itzmerai.github.io/Quadrant/">Website and live demo</a> ·
   <a href="https://itzmerai.github.io/Quadrant/download/">Download for Windows</a> ·
   <a href="https://itzmerai.github.io/Quadrant/guide/">Guide</a>
 </p>
