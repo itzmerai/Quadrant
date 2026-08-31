@@ -59,6 +59,10 @@ export interface Lead {
 
   website: string | null;
   email: string | null;
+  /** published = found on their site. guessed = inferred, domain accepts mail. */
+  emailConfidence?: 'published' | 'guessed';
+  /** Where to reach practices that publish a form instead of an address. */
+  contactFormUrl?: string | null;
 
   /** ISO date the practice was first enumerated — proxy for practice age. */
   enumeratedAt: string | null;

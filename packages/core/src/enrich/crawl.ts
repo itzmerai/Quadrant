@@ -1,7 +1,8 @@
 import type { Lead, ProgressFn } from '../types';
 import type { Http, CancelToken } from '../http';
 import { mapLimit } from '../http';
-import { bestEmail } from './email';
+import { bestEmail, findContactForm } from './email';
+import { acceptsMail, guessAddress } from './mx';
 import { rescore } from '../score';
 
 /**
@@ -9,7 +10,7 @@ import { rescore } from '../score';
  * Homepage first, because many one-page sites put it in the footer; then the
  * conventional contact routes.
  */
-const PATHS = ['', '/contact', '/contact-us', '/about', '/about-us'];
+const PATHS = ['', '/contact', '/contact-us', '/about', '/about-us', '/appointments', '/new-patients'];
 
 const CONCURRENCY = 6;
 const PER_PAGE_TIMEOUT = 12_000;
@@ -66,44 +67,62 @@ async function crawlOne(lead: Lead, http: Http): Promise<Lead> {
   const domain = domainOf(origin);
 
   let discovered: string | null = null;
+  let formUrl: string | null = null;
 
-  for (const path of PATHS) {
+  const pages: string[] = [];
+  for (const path of PATHS) pages.push(origin + path);
+
+  for (let i = 0; i < pages.length; i++) {
+    const url = pages[i]!;
     try {
-      const html = await http.getText(origin + path);
+      const html = await http.getText(url);
+
       const hit = bestEmail(html, domain);
       if (hit) {
         return rescore({
           ...lead,
           email: hit.email,
+          emailConfidence: 'published',
           website: origin,
+          contactFormUrl: formUrl,
           enrichedAt: new Date().toISOString(),
         });
       }
-      // Remember the site's own contact route while we have the homepage.
-      if (path === '' && !discovered) discovered = findContactLink(html, origin);
+
+      // No address here, but a form is still a way through.
+      if (!formUrl) formUrl = findContactForm(html, url);
+      // Follow the site's own contact link if the usual paths miss.
+      if (i === 0 && !discovered) {
+        discovered = findContactLink(html, origin);
+        if (discovered && !pages.includes(discovered)) pages.push(discovered);
+      }
     } catch {
       // A dead path is ordinary. Keep going.
     }
   }
 
-  if (discovered) {
-    try {
-      const html = await http.getText(discovered);
-      const hit = bestEmail(html, domain);
-      if (hit) {
-        return rescore({
-          ...lead,
-          email: hit.email,
-          website: origin,
-          enrichedAt: new Date().toISOString(),
-        });
-      }
-    } catch {
-      /* give up quietly */
-    }
+  /**
+   * Nothing published. If the domain accepts mail, info@ is the address a
+   * small practice is most likely to own - marked as a guess so she can see
+   * the difference before she sends anything.
+   */
+  if (domain && (await acceptsMail(domain, http))) {
+    return rescore({
+      ...lead,
+      email: guessAddress(domain),
+      emailConfidence: 'guessed',
+      website: origin,
+      contactFormUrl: formUrl,
+      enrichedAt: new Date().toISOString(),
+    });
   }
 
-  return { ...lead, website: origin, enrichedAt: new Date().toISOString() };
+  return {
+    ...lead,
+    website: origin,
+    contactFormUrl: formUrl,
+    enrichedAt: new Date().toISOString(),
+  };
 }
 
 /**
