@@ -1,0 +1,305 @@
+/* ============================================================
+   Layout controls, status pills, card view, settings.
+   Imported by app.css; tokens are defined there.
+   ============================================================ */
+
+/* ---- collapsible sidebar (R1) ---- */
+
+.app.rail { grid-template-columns: 60px 1fr; }
+.app.rail .brand-text,
+.app.rail .terr-name,
+.app.rail .terr-meta,
+.app.rail .terr-head span:first-child { display: none; }
+.app.rail .sidebar { padding: 18px 10px; }
+.app.rail .terr { align-items: center; padding: 9px 0; }
+.app.rail .terr-initial { display: grid; }
+.app.rail .brand { justify-content: center; }
+
+.brand { position: relative; }
+.brand-text { min-width: 0; }
+
+.terr-initial {
+  display: none;
+  place-items: center;
+  width: 26px; height: 26px;
+  border-radius: 4px;
+  background: var(--sunken);
+  border: 1px solid var(--line);
+  font-size: 12px; font-weight: 650; color: var(--ink-2);
+}
+.terr.selected .terr-initial { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+.rail-toggle {
+  position: absolute; top: -2px; right: -4px;
+  width: 20px; height: 20px; padding: 0;
+  border-radius: 4px; border: 1px solid var(--line);
+  background: var(--surface); color: var(--muted);
+  font-size: 11px; line-height: 1; cursor: pointer;
+}
+.rail-toggle:hover { color: var(--ink); background: var(--sunken); }
+.app.rail .rail-toggle { position: static; }
+
+.settings-btn {
+  margin-top: auto;
+  display: flex; align-items: center; gap: 9px;
+  font-size: 13px; padding: 9px 11px;
+  color: var(--ink-2);
+}
+.settings-btn:hover:not(:disabled) { color: var(--ink); background: var(--sunken); }
+.settings-icon { font-size: 17px; line-height: 1; flex: none; }
+.app.rail .settings-btn { justify-content: center; padding: 9px 0; }
+
+/* ---- resizable and closable map (R2, R3) ---- */
+
+.map-resizer {
+  height: 7px; flex: none; cursor: row-resize;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  display: grid; place-items: center;
+  touch-action: none;
+}
+.map-resizer:hover, .map-resizer:focus-visible { background: var(--accent-soft); }
+.map-resizer-grip { width: 34px; height: 2px; border-radius: 2px; background: var(--line); }
+.map-resizer:hover .map-resizer-grip { background: var(--accent); }
+
+.map-controls {
+  position: absolute; z-index: 500; right: 12px; bottom: 14px;
+  display: flex; gap: 6px;
+}
+.map-btn {
+  font: inherit; font-size: 12px; font-weight: 550;
+  padding: 6px 11px; border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--surface); color: var(--ink-2);
+  cursor: pointer; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.16);
+}
+.map-btn:hover { background: var(--sunken); color: var(--ink); }
+
+.map-reopen {
+  flex: none; width: 100%;
+  font: inherit; font-size: 12.5px; font-weight: 550;
+  padding: 7px 12px; cursor: pointer;
+  border: 0; border-bottom: 1px solid var(--line);
+  background: var(--sunken); color: var(--ink-2);
+}
+.map-reopen:hover { background: var(--accent-soft); color: var(--accent); }
+
+/* ---- status pills (R5): all eight states distinct ---- */
+
+.pill {
+  appearance: none; -webkit-appearance: none;
+  display: inline-block; max-width: 100%;
+  padding: 4px 10px; border-radius: 100px;
+  font: inherit; font-size: 11.5px; font-weight: 600;
+  line-height: 1.4; white-space: nowrap;
+  border: 1px solid transparent;
+  cursor: pointer;
+  text-overflow: ellipsis;
+}
+.pill:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.pill.s-new            { background: var(--sunken);      color: var(--muted);  border-color: var(--line); }
+.pill.s-no-answer      { background: var(--cool-soft);   color: var(--cool);   border-color: var(--cool); }
+.pill.s-follow-up      { background: var(--warm-soft);   color: var(--warm);   border-color: var(--warm); }
+.pill.s-interested     { background: var(--good);        color: #fff;          border-color: var(--good); }
+.pill.s-do-not-contact { background: var(--danger);      color: #fff;          border-color: var(--danger); }
+
+/* ---- view switch and card view (R6) ---- */
+
+.viewswitch {
+  display: inline-flex; border: 1px solid var(--line);
+  border-radius: var(--radius); overflow: hidden;
+}
+.vs-btn {
+  font: inherit; font-size: 12px; font-weight: 550;
+  padding: 5px 11px; border: 0; cursor: pointer;
+  background: var(--surface); color: var(--muted);
+}
+.vs-btn.on { background: var(--accent); color: #fff; }
+.vs-btn:not(.on):hover { background: var(--sunken); color: var(--ink); }
+
+.cards-scroll { flex: 1; min-height: 0; overflow: auto; padding: 12px 18px; }
+.cards-grid { display: grid; gap: 12px; align-content: start; }
+
+.lead-card {
+  height: 168px; box-sizing: border-box;
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 12px 14px; border-radius: 6px;
+  background: var(--surface); border: 1px solid var(--line);
+  border-left-width: 3px;
+  overflow: hidden;
+}
+.lead-card.hot { border-left-color: var(--hot); }
+.lead-card.warm { border-left-color: var(--warm); }
+.lead-card.cool { border-left-color: var(--line); }
+.lead-card:hover { border-color: var(--accent-line); }
+
+.lc-head { display: flex; align-items: flex-start; gap: 8px; }
+.lc-head h4 {
+  margin: 0; font-size: 13.5px; font-weight: 600; line-height: 1.3;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.lc-sub { margin: 0; font-size: 11.5px; color: var(--muted); }
+.lc-fields {
+  margin: 0; display: grid; grid-template-columns: auto 1fr;
+  gap: 2px 10px; font-size: 12.5px; align-content: start;
+}
+.lc-fields dt { color: var(--muted); }
+.lc-fields dd { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lc-foot { margin-top: auto; }
+
+/* ---- settings (R7, R8, R9) ---- */
+
+.modal.settings { width: min(680px, 100%); }
+.set-group { padding: 16px 0; border-top: 1px solid var(--line-soft); }
+.set-group:first-of-type { border-top: 0; padding-top: 4px; }
+.set-group h3 { margin: 0 0 8px; font-size: 13px; font-weight: 650; }
+.set-hint { margin: 6px 0 0; font-size: 11.5px; color: var(--muted); line-height: 1.5; }
+
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.seg-btn {
+  font: inherit; font-size: 12.5px; font-weight: 550;
+  padding: 6px 14px; border: 0; cursor: pointer;
+  background: var(--surface); color: var(--muted);
+}
+.seg-btn.on { background: var(--accent); color: #fff; }
+.seg-btn:not(.on):hover { background: var(--sunken); color: var(--ink); }
+
+.set-row { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 10px; }
+.set-row label { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--ink-2); }
+.set-row select {
+  font: inherit; font-size: 13px; padding: 5px 9px;
+  border-radius: var(--radius); border: 1px solid var(--line);
+  background: var(--paper); color: var(--ink);
+}
+
+.daypick { display: flex; gap: 5px; flex-wrap: wrap; }
+.day {
+  font: inherit; font-size: 12px; font-weight: 550;
+  padding: 5px 10px; border-radius: var(--radius);
+  border: 1px solid var(--line); background: var(--surface);
+  color: var(--muted); cursor: pointer;
+}
+.day.on { background: var(--accent-soft); border-color: var(--accent-line); color: var(--accent); }
+
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  font: inherit; font-size: 12px;
+  padding: 5px 11px; border-radius: 100px;
+  border: 1px solid var(--line); background: var(--surface);
+  color: var(--muted); cursor: pointer;
+}
+.chip.on {
+  background: var(--accent-soft); border-color: var(--accent-line);
+  color: var(--accent); font-weight: 550;
+}
+
+.set-check {
+  display: flex; gap: 9px; align-items: flex-start;
+  margin-top: 12px; font-size: 12.5px; cursor: pointer;
+}
+.set-check > span { display: flex; flex-direction: column; gap: 2px; }
+.set-check .set-hint { margin: 0; }
+
+.datapath { display: block; margin: 6px 0 10px; word-break: break-all; color: var(--ink-2); }
+
+/* ---- dark map (R10) ----
+   Applied to Leaflet's tile pane only. Filtering the whole map would invert
+   the territory rectangles, tooltips and zoom controls along with it. */
+
+.map-host.theme-dark .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.88) saturate(0.7);
+}
+
+/* The attribution strip sits over the filtered tiles and needs its own ground. */
+.map-host.theme-dark .leaflet-control-attribution {
+  background: rgba(11, 16, 24, 0.82);
+  color: var(--muted);
+}
+.map-host.theme-dark .leaflet-control-attribution a { color: var(--accent); }
+
+/* ---- per-box colour and menu ---- */
+
+/* The row carries the card so the menu can sit inside its border. */
+.terr-row {
+  position: relative;
+  border: 1px solid transparent;
+  border-left: 3px solid var(--terr-color, transparent);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.terr-row:hover { background: var(--sunken); }
+
+/* The button fills the card; the card owns the border and radius now. */
+.terr-row .terr {
+  width: 100%;
+  border: 0; border-radius: 0;
+  background: transparent;
+  padding-right: 28px;
+}
+.terr-row .terr:hover { background: transparent; }
+
+.terr-row.selected {
+  background: color-mix(in srgb, var(--terr-color, var(--accent)) 12%, transparent);
+  border-color: var(--terr-color, var(--accent-line));
+  border-left-color: var(--terr-color, var(--accent));
+}
+.terr-row .terr.selected { background: transparent; }
+.terr-row .terr.selected .terr-initial {
+  background: var(--terr-color, var(--accent));
+  border-color: var(--terr-color, var(--accent));
+  color: #fff;
+}
+
+.terr-menu-btn {
+  position: absolute; top: 50%; right: 4px;
+  transform: translateY(-50%);
+  width: 20px; height: 24px;
+  padding: 0; border: 0; border-radius: var(--radius);
+  background: transparent; color: var(--muted);
+  font-size: 14px; line-height: 1; cursor: pointer;
+  opacity: 0;
+}
+.terr-row:hover .terr-menu-btn,
+.terr-menu-btn.open,
+.terr-menu-btn:focus-visible { opacity: 1; }
+.terr-menu-btn:hover { background: var(--sunken); color: var(--ink); }
+.app.rail .terr-menu-btn { display: none; }
+
+/* Position-fixed so the scrolling sidebar cannot clip it. */
+.terr-pop {
+  position: fixed; z-index: 3000;
+  width: 196px; padding: 10px;
+  border-radius: 6px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.24);
+}
+.terr-pop-head {
+  margin: 0 0 8px;
+  font-size: 10.5px; font-weight: 600;
+  letter-spacing: 0.09em; text-transform: uppercase;
+  color: var(--muted);
+}
+
+.swatches { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; }
+.swatch {
+  width: 100%; aspect-ratio: 1; padding: 0;
+  border-radius: 50%; cursor: pointer;
+  border: 2px solid transparent;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.16);
+}
+.swatch:hover { transform: scale(1.12); }
+.swatch.on { border-color: var(--ink); }
+
+.terr-pop-sep { height: 1px; background: var(--line-soft); margin: 10px -10px; }
+.terr-pop-item {
+  width: 100%; text-align: left;
+  font: inherit; font-size: 12.5px;
+  padding: 6px 8px; border: 0; border-radius: var(--radius);
+  background: transparent; color: var(--ink-2); cursor: pointer;
+}
+.terr-pop-item:hover { background: var(--sunken); }
+.terr-pop-item.danger { color: var(--danger); }
+.terr-pop-item.danger:hover { background: var(--hot-soft); }

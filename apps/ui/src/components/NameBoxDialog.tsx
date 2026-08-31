@@ -1,16 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
-import { SPECIALTY_GROUPS, areaKm2, formatBBox, presetKeys, type BBox } from '@quadrant/core';
+import { SPECIALTY_GROUPS, areaKm2, formatBBox, type BBox } from '@quadrant/core';
 
 interface Props {
   bbox: BBox;
   zipCount: number;
+  /** Pre-ticked groups, from Settings rather than a fixed preset (R8). */
+  defaultSpecialties: string[];
   onCancel: () => void;
   onCreate: (name: string, specialties: string[]) => void;
 }
 
-export function NameBoxDialog({ bbox, zipCount, onCancel, onCreate }: Props) {
+export function NameBoxDialog({ bbox, zipCount, defaultSpecialties, onCancel, onCreate }: Props) {
   const [name, setName] = useState('');
-  const [picked, setPicked] = useState<string[]>(presetKeys());
+  const [picked, setPicked] = useState<string[]>(defaultSpecialties);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {

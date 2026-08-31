@@ -8,6 +8,10 @@ import {
   type Lead,
 } from '@quadrant/core';
 import { ExternalLink } from './ExternalLink';
+import { LeadCards } from './LeadCards';
+import { computeWindow } from './leadWindow';
+import { usePreferences } from '../lib/PreferencesContext';
+import { StatusPill, STATUSES, STATUS_LABEL } from './StatusPill';
 
 interface Props {
   leads: Lead[];
@@ -19,21 +23,6 @@ interface Props {
   onVisibleChange?: (visible: Lead[]) => void;
 }
 
-const STATUSES: CallStatus[] = [
-  'new', 'queued', 'called', 'voicemail', 'callback',
-  'interested', 'not-interested', 'do-not-contact',
-];
-
-const STATUS_LABEL: Record<CallStatus, string> = {
-  'new': 'New',
-  'queued': 'Queued',
-  'called': 'Called',
-  'voicemail': 'Voicemail',
-  'callback': 'Call back',
-  'interested': 'Interested',
-  'not-interested': 'Not interested',
-  'do-not-contact': 'Do not contact',
-};
 
 /**
  * Published beats guessed: a published address is safe to send to, a guessed
@@ -106,6 +95,7 @@ export function LeadTable({ leads, onPatch, scanned, zipCount, onVisibleChange }
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportH, setViewportH] = useState(600);
 
+  const { prefs, update } = usePreferences();
   const hasLeads = leads.length > 0;
 
   /**
@@ -139,7 +129,7 @@ export function LeadTable({ leads, onPatch, scanned, zipCount, onVisibleChange }
       if (group !== 'all' && l.specialtyGroup !== group) return false;
       if (status !== 'all' && l.callStatus !== status) return false;
       if (!matchesContact(l, contact)) return false;
-      if (openHoursOnly && isOfficeHours(l.timezone, now) !== true) return false;
+      if (openHoursOnly && isOfficeHours(l.timezone, prefs.callingWindow, now) !== true) return false;
       if (!q) return true;
       return (
         l.practiceName.toLowerCase().includes(q) ||
@@ -149,7 +139,7 @@ export function LeadTable({ leads, onPatch, scanned, zipCount, onVisibleChange }
         (l.phone ?? '').includes(q)
       );
     });
-  }, [leads, query, group, status, contact, openHoursOnly, now]);
+  }, [leads, query, group, status, contact, openHoursOnly, now, prefs.callingWindow]);
 
   /** Live counts, so the filter says what it will actually give her. */
   const contactCounts = useMemo(() => {
@@ -198,12 +188,18 @@ export function LeadTable({ leads, onPatch, scanned, zipCount, onVisibleChange }
 
   const expandedIndex = expanded ? filtered.findIndex((l) => l.id === expanded) : -1;
 
-  const first = Math.max(0, Math.floor(scrollTop / ROW_H) - OVERSCAN);
-  const visibleCount = Math.ceil(viewportH / ROW_H) + OVERSCAN * 2;
-  const last = Math.min(filtered.length, first + visibleCount);
-
-  const padTop = first * ROW_H;
-  let padBottom = Math.max(0, (filtered.length - last) * ROW_H);
+  // Shared with the card view so the two cannot drift apart (KTD4). The list
+  // is simply the one-per-row case.
+  const win = computeWindow({
+    itemHeight: ROW_H,
+    perRow: 1,
+    overscan: OVERSCAN,
+    count: filtered.length,
+    scrollTop,
+    viewportH,
+  });
+  const { first, last, padTop } = win;
+  let padBottom = win.padBottom;
   // The one expanded row is taller, so keep the scroll extent honest.
   if (expandedIndex >= last) padBottom += EXPANDED_H;
 
@@ -267,11 +263,31 @@ export function LeadTable({ leads, onPatch, scanned, zipCount, onVisibleChange }
           />
           <span>Open now</span>
         </label>
+        <div className="viewswitch" role="group" aria-label="Layout">
+          <button
+            className={'vs-btn' + (prefs.viewMode === 'list' ? ' on' : '')}
+            onClick={() => update({ viewMode: 'list' })}
+            title="Dense rows"
+          >List</button>
+          <button
+            className={'vs-btn' + (prefs.viewMode === 'cards' ? ' on' : '')}
+            onClick={() => update({ viewMode: 'cards' })}
+            title="Roomier cards"
+          >Cards</button>
+        </div>
         <span className="filter-count tnum">
           {filtered.length.toLocaleString()} of {leads.length.toLocaleString()}
         </span>
       </div>
 
+      {prefs.viewMode === 'cards' ? (
+        <LeadCards
+          leads={filtered}
+          onPatch={onPatch}
+          callingWindow={prefs.callingWindow}
+          now={now}
+        />
+      ) : (
       <div
         className="tblwrap"
         ref={scrollRef}
@@ -292,10 +308,14 @@ export function LeadTable({ leads, onPatch, scanned, zipCount, onVisibleChange }
             </tr>
           </thead>
           <tbody>
-            {padTop > 0 && <tr className="spacer" style={{ height: padTop }} />}
+            {padTop > 0 && (
+              <tr className="spacer" style={{ height: padTop }}>
+                <td colSpan={columnCount} />
+              </tr>
+            )}
 
             {windowed.map((l) => {
-              const open = isOfficeHours(l.timezone, now);
+              const open = isOfficeHours(l.timezone, prefs.callingWindow, now);
               const isOpen = expanded === l.id;
               return (
                 <Fragment key={l.id}>
@@ -375,20 +395,12 @@ export function LeadTable({ leads, onPatch, scanned, zipCount, onVisibleChange }
                     </td>
                     <td className="sub">{l.specialty}</td>
                     <td onClick={(e) => e.stopPropagation()}>
-                      <select
-                        className={'status s-' + l.callStatus}
+                      <StatusPill
                         value={l.callStatus}
-                        onChange={(e) =>
-                          onPatch(l.id, {
-                            callStatus: e.target.value as CallStatus,
-                            lastCalledAt: new Date().toISOString(),
-                          })
+                        onChange={(next) =>
+                          onPatch(l.id, { callStatus: next, lastCalledAt: new Date().toISOString() })
                         }
-                      >
-                        {STATUSES.map((s) => (
-                          <option key={s} value={s}>{STATUS_LABEL[s]}</option>
-                        ))}
-                      </select>
+                      />
                     </td>
                   </tr>
 
@@ -444,10 +456,15 @@ export function LeadTable({ leads, onPatch, scanned, zipCount, onVisibleChange }
               );
             })}
 
-            {padBottom > 0 && <tr className="spacer" style={{ height: padBottom }} />}
+            {padBottom > 0 && (
+              <tr className="spacer" style={{ height: padBottom }}>
+                <td colSpan={columnCount} />
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
+      )}
     </div>
   );
 }

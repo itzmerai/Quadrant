@@ -136,3 +136,31 @@ export async function getFs(): Promise<FsAdapter> {
 export const STORAGE_LABEL = IS_TAURI
   ? 'Saved to your app data folder'
   : 'Saved in this browser (dev mode)';
+
+/* ------------------------------------------------------------------ */
+/* Data location                                                       */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Where the operator's boxes actually live, shown in Settings so the storage
+ * location is not a mystery.
+ */
+export function dataFolderPath(): string {
+  return IS_TAURI
+    ? 'App data folder \u2192 Quadrant \u2192 territories'
+    : 'Browser storage (dev mode) \u2014 not a folder on disk';
+}
+
+/** Reveal that folder in the OS file manager. Desktop only. */
+export async function openDataFolder(): Promise<void> {
+  if (!IS_TAURI) return;
+  try {
+    const [{ appDataDir }, { openPath }] = await Promise.all([
+      import('@tauri-apps/api/path'),
+      import('@tauri-apps/plugin-opener'),
+    ]);
+    await openPath(await appDataDir());
+  } catch {
+    /* nothing sensible to do if the OS refuses */
+  }
+}
