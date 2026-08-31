@@ -1,0 +1,24 @@
+{
+  "name": "quadrant-site",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Marketing site for Quadrant. Deliberately a separate workspace from the desktop app so its dependencies cannot reach the app's tree.",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "check": "astro check",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "astro": "^5"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.4",
+    "@types/node": "^26.4.0",
+    "typescript": "^5",
+    "vitest": "^3"
+  }
+}

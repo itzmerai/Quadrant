@@ -1,0 +1,130 @@
+# Builds the Windows installer and publishes it as a GitHub Release.
+#
+# Triggered by a version tag only. The site deploys from its own workflow, so
+# fixing a typo on the download page never requires cutting a version, and a
+# failed Windows build never blocks a content change.
+#
+# The release is left as a draft. Publishing is a human decision — the tag says
+# the code is ready, not that it should be handed to strangers.
+name: Release
+
+# No manual dispatch: the workflow releases `github.ref_name`, which on a
+# manual run would be a branch name rather than a version. Test it by pushing
+# a throwaway tag and deleting the draft afterwards.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  installer:
+    runs-on: windows-latest
+    # Secrets cannot be read from a step-level `if`, so the presence check is
+    # hoisted to a job-level variable the steps can test.
+    env:
+      HAS_SIGNING_CERT: ${{ secrets.WINDOWS_CERTIFICATE != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop
+
+      - name: Install app dependencies
+        run: npm ci
+
+      - name: Typecheck and test
+        run: |
+          npm run typecheck
+          npm test
+
+      # Authenticode signing, when a certificate exists.
+      #
+      # Tauri signs Windows binaries through the certificate store: the
+      # thumbprint goes in tauri.conf.json and signtool finds the key. This is
+      # NOT the same thing as TAURI_SIGNING_PRIVATE_KEY, which belongs to the
+      # updater and signs nothing Windows trusts.
+      #
+      # Without the secrets this step is skipped entirely and the build
+      # produces an unsigned installer, so forks and pre-certificate releases
+      # keep working. The download page explains the SmartScreen warning.
+      - name: Import the signing certificate
+        if: env.HAS_SIGNING_CERT == 'true'
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          $pfx = Join-Path $env:RUNNER_TEMP 'signing.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+
+          $password = ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
+          $imported = Import-PfxCertificate -FilePath $pfx `
+            -CertStoreLocation Cert:\CurrentUser\My -Password $password
+          Remove-Item $pfx -Force
+
+          # Patch the thumbprint in rather than committing it: the certificate
+          # is a secret and the config file is public.
+          $conf = Get-Content apps/desktop/tauri.conf.json -Raw | ConvertFrom-Json
+          if (-not $conf.bundle.windows) {
+            $conf.bundle | Add-Member -NotePropertyName windows -NotePropertyValue ([pscustomobject]@{})
+          }
+          $conf.bundle.windows | Add-Member -NotePropertyName certificateThumbprint -NotePropertyValue $imported.Thumbprint -Force
+          $conf.bundle.windows | Add-Member -NotePropertyName digestAlgorithm -NotePropertyValue 'sha256' -Force
+          $conf.bundle.windows | Add-Member -NotePropertyName timestampUrl -NotePropertyValue 'http://timestamp.digicert.com' -Force
+          $conf | ConvertTo-Json -Depth 32 | Set-Content apps/desktop/tauri.conf.json -Encoding utf8
+
+          Write-Host "Signing with thumbprint $($imported.Thumbprint)"
+
+      - name: Build and publish the release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          # The Tauri project is not at the conventional src-tauri/, so the
+          # action has to be told where it lives.
+          projectPath: apps/desktop
+          tagName: ${{ github.ref_name }}
+          releaseName: Quadrant ${{ github.ref_name }}
+          releaseDraft: true
+          prerelease: false
+
+      # The checksum is published as its own asset so the download page can show
+      # a hash without pulling down the installer to compute one.
+      #
+      # `releases/latest/download/<name>` resolves by asset *filename*, and
+      # Tauri bakes the version into its own — `Quadrant_0.1.0_x64-setup.exe`.
+      # Linking to that would break on every release, which defeats the point of
+      # a permalink. The stable copy is what the site links to; the versioned one
+      # stays for people who want a specific build.
+      - name: Publish the checksum and a stable-named installer
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          $installer = Get-ChildItem -Recurse -Filter '*-setup.exe' `
+            -Path 'apps/desktop/target/release/bundle/nsis' | Select-Object -First 1
+          if (-not $installer) { throw 'No NSIS installer was produced.' }
+
+          $hash = (Get-FileHash -Algorithm SHA256 $installer.FullName).Hash.ToLower()
+          $sums = Join-Path $env:RUNNER_TEMP 'SHA256SUMS.txt'
+          Set-Content -Path $sums -Value "$hash  $($installer.Name)" -Encoding ascii
+
+          $stable = Join-Path $env:RUNNER_TEMP 'Quadrant-setup.exe'
+          Copy-Item $installer.FullName $stable -Force
+
+          Write-Host "Installer: $($installer.Name)"
+          Write-Host "SHA-256:   $hash"
+
+          gh release upload $env:TAG_NAME $sums $stable --clobber

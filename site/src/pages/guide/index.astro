@@ -1,0 +1,399 @@
+---
+import Base from '../../layouts/Base.astro';
+import { REPO_URL } from '../../lib/release';
+
+const base = import.meta.env.BASE_URL;
+const href = (p: string) => (base.endsWith('/') ? base : base + '/') + p.replace(/^\//, '');
+
+/** Drives the nav rail and every heading anchor, so the two cannot drift. */
+const steps = [
+  { id: 'draw', label: 'Draw a territory' },
+  { id: 'scan', label: 'Find the leads' },
+  { id: 'sheet', label: 'Read the call sheet' },
+  { id: 'phones', label: 'Work the phones' },
+  { id: 'emails', label: 'Find emails' },
+  { id: 'settings', label: 'Settings' },
+  { id: 'rescan', label: 'Rescanning' },
+  { id: 'trouble', label: 'Troubleshooting' },
+  { id: 'calling', label: 'Calling responsibly' },
+];
+---
+
+<Base
+  title="How to use Quadrant"
+  description="From installing Quadrant to working a call sheet: drawing a territory, scanning it, reading the ranking, and tracking calls."
+>
+  <section class="hero" style="padding-bottom:36px">
+    <div class="wrap doc">
+      <a class="backlink" href={href("")}>Back to home</a>
+      <h1>How to use Quadrant</h1>
+      <p class="lede" style="max-width:66ch">
+        From a blank map to a call sheet you can work through. About ten minutes
+        end to end, most of it waiting for the first scan.
+      </p>
+    </div>
+  </section>
+
+  <div class="wrap doc">
+    <div class="doc-grid">
+      <nav class="doc-nav" aria-label="On this page">
+        <p class="doc-nav-title">On this page</p>
+        <ol>
+          {steps.map((s) => (
+            <li><a href={`#${s.id}`}>{s.label}</a></li>
+          ))}
+        </ol>
+      </nav>
+
+      <div class="doc-body">
+        <section id="draw">
+          <p class="eyebrow">Step one</p>
+          <h2>Draw a territory</h2>
+
+          <div class="prose">
+            <p>
+              A <strong>box</strong> is a named area that owns its own leads, call
+              statuses and notes. Most people keep one per niche and city &mdash;
+              <em>Scottsdale Dentists</em>, <em>Tampa Chiropractors</em>.
+            </p>
+            <ol class="steps">
+              <li>Click <strong>+ New box</strong> in the sidebar.</li>
+              <li>
+                Press and drag on the map to draw a rectangle. Draw it over a
+                <strong>US city</strong> &mdash; the registry Quadrant reads is a US
+                federal system, and it will refuse a box drawn anywhere else rather
+                than let you scan for nothing.
+              </li>
+              <li>
+                Name it, then tick the specialties you want. The dialog shows how
+                many ZIP codes fall inside, which is the best early signal of how
+                big the scan will be.
+              </li>
+            </ol>
+
+            <div class="note">
+              <p>
+                <strong>Start small.</strong> A few neighbourhood blocks comes back
+                in about five seconds. A whole metro area took three minutes and
+                returned 762 practices. Draw small first and see whether the list is
+                worth calling before you commit to a big one.
+              </p>
+            </div>
+
+            <p style="margin-top:20px">
+              Lost on the map? <strong>Show US</strong> in the bottom-right corner
+              brings you back. Want more room for the list? Drag the bar under the
+              map to resize it, or <strong>Hide map</strong> to reclaim the space
+              entirely &mdash; pressing <strong>+ New box</strong> reopens it for you.
+            </p>
+          </div>
+        </section>
+
+        <section id="scan">
+          <p class="eyebrow">Step two</p>
+          <h2>Find the leads</h2>
+
+          <div class="prose">
+            <p>
+              With the box selected, click <strong>Find leads</strong>. Quadrant
+              works out which ZIP codes your rectangle covers, queries the provider
+              registry for each one, drops the practices you would never pitch, and
+              ranks what remains.
+            </p>
+            <p>
+              Progress shows as it goes, and <strong>Stop</strong> cancels at any
+              point without losing what has already been found.
+            </p>
+
+            <h3 style="margin-top:26px">What gets dropped, and why</h3>
+            <p>
+              Hospitals, assisted-living operators, home-health agencies, equipment
+              suppliers and pharmacies are filtered out. They have procurement
+              departments, not a doctor who picks up the phone. Duplicate
+              registrations that share a phone number are merged into one row, so
+              you never dial the same front desk twice &mdash; the row tells you how
+              many practices sit behind that number.
+            </p>
+          </div>
+        </section>
+
+        <section id="sheet">
+          <p class="eyebrow">Step three</p>
+          <h2>Read the call sheet</h2>
+
+          <div class="tblwrap" style="margin-bottom:22px">
+            <table class="tbl">
+              <thead>
+                <tr><th>Column</th><th>What it tells you</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Score</strong></td>
+                  <td>Call order. Red is hot, amber warm, grey cool. Click any row to see the reasoning.</td>
+                </tr>
+                <tr>
+                  <td><strong>Practice</strong></td>
+                  <td>Who you are calling, and their city. A badge appears when other practices share the number.</td>
+                </tr>
+                <tr>
+                  <td><strong>Phone</strong></td>
+                  <td>The practice line. Click to dial if your machine handles <code>tel:</code> links.</td>
+                </tr>
+                <tr>
+                  <td><strong>Ask for</strong></td>
+                  <td>The named official on the registry record, and their title. This is the difference between a conversation and a gatekeeper.</td>
+                </tr>
+                <tr>
+                  <td><strong>Their time</strong></td>
+                  <td>The clock <em>at the practice</em>, not yours. Green means inside your calling window.</td>
+                </tr>
+                <tr>
+                  <td><strong>Status</strong></td>
+                  <td>Where you are with them. Set it from the row while you are on the call.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="prose">
+            <h3>Why a lead scored what it did</h3>
+            <p>
+              Click a row to expand it. <strong>Why this lead</strong> lists the
+              actual signals &mdash; a direct line that bypasses reception, a
+              practice registered in the last couple of years, a strong specialty
+              fit. A registry record nobody has updated in five years <em>loses</em>
+              points and says so.
+            </p>
+            <p>
+              The panel also carries the direct line, address, website, email,
+              registration date and the NPI, plus a <strong>Call notes</strong> box
+              that saves when you click away.
+            </p>
+
+            <h3 style="margin-top:26px">The best signal on the sheet</h3>
+            <p>
+              A practice registered recently is a <strong>new clinic</strong> &mdash;
+              no admin staff hired yet, still setting up how it runs. That is the
+              warmest call available to a VA, and it is why score is worth trusting
+              as call order rather than sorting alphabetically.
+            </p>
+          </div>
+        </section>
+
+        <section id="phones">
+          <p class="eyebrow">Step four</p>
+          <h2>Work the phones</h2>
+
+          <div class="prose">
+            <p>Five statuses, each with a different next action:</p>
+            <dl class="kv" style="max-width:52ch">
+              <dt><strong>New</strong></dt><dd>Not called yet</dd>
+              <dt><strong>No answer</strong></dt><dd>Tried, nobody picked up &mdash; try again later</dd>
+              <dt><strong>Follow up</strong></dt><dd>Reached out, waiting on them</dd>
+              <dt><strong>Interested</strong></dt><dd>Pursue this one</dd>
+              <dt><strong>Do not contact</strong></dt><dd>Stop calling. Honor this the first time you are asked.</dd>
+            </dl>
+
+            <h3 style="margin-top:26px">Filters that earn their keep</h3>
+            <p>
+              <strong>Open now</strong> hides every practice outside your calling
+              window, which is the single most useful filter when you are working
+              across US timezones from elsewhere. The status filter lets you sweep
+              back through everyone marked <em>No answer</em>, and the specialty
+              filter lets you batch one niche at a time so your pitch stays sharp.
+            </p>
+            <p>
+              Prefer bigger rows? Switch <strong>List</strong> to
+              <strong>Cards</strong>. Same leads, same filters, roomier layout.
+            </p>
+          </div>
+        </section>
+
+        <section id="emails">
+          <p class="eyebrow">Step five</p>
+          <h2>Find emails, if you want them</h2>
+
+          <div class="prose">
+            <p>
+              <strong>Find emails</strong> is a separate button on purpose. The scan
+              is fast; hunting emails is slow &mdash; roughly a second per practice
+              &mdash; because it has to find each practice&rsquo;s website and read
+              it. Doing it in one pass would make you wait for a call sheet you
+              could already be working.
+            </p>
+            <p>
+              It is cancellable and saves as it goes, so stopping halfway keeps
+              everything found so far.
+            </p>
+
+            <div class="candid">
+              <h3>Set your expectations here</h3>
+              <p>
+                The registry holds <strong>no email addresses at all</strong>. Every
+                one Quadrant shows was found by locating a practice&rsquo;s site and
+                reading it, and plenty of practices publish a contact form instead
+                of an address. Expect roughly a quarter to a third, not
+                near-total like phone.
+              </p>
+            </div>
+
+            <h3 style="margin-top:26px">Published versus guessed</h3>
+            <p>
+              An address shown in plain text was <strong>published</strong> on the
+              practice&rsquo;s own site. One shown in amber with a dashed underline
+              was <strong>guessed</strong> &mdash; Quadrant confirmed the domain
+              accepts mail and inferred <code>info@</code>, which is usually right
+              but can bounce.
+            </p>
+            <p>
+              Use the contact filter&rsquo;s <strong>Published email only</strong>
+              option before any mail-out. Bounces cost sender reputation, and that
+              distinction is exactly what the filter is for. Turn guessing off
+              entirely in Settings if you would rather not have them at all.
+            </p>
+          </div>
+        </section>
+
+        <section id="settings">
+          <p class="eyebrow">Worth setting once</p>
+          <h2>Settings</h2>
+
+          <div class="tblwrap">
+            <table class="tbl">
+              <thead>
+                <tr><th>Setting</th><th>Why you would change it</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Appearance</strong></td>
+                  <td>Follow system, light or dark. The map follows too.</td>
+                </tr>
+                <tr>
+                  <td><strong>When you call</strong></td>
+                  <td>
+                    Your calling window and days. This is what <strong>Open
+                    now</strong> means &mdash; change it from 9&ndash;5 and the
+                    filter changes with it. The hours are hours <em>at the
+                    practice</em>.
+                  </td>
+                </tr>
+                <tr>
+                  <td><strong>New boxes start with</strong></td>
+                  <td>Which specialties are pre-ticked when you name a box. Set it to your niche and stop re-ticking.</td>
+                </tr>
+                <tr>
+                  <td><strong>Finding emails</strong></td>
+                  <td>How hard the hunt tries, and whether guessed addresses are produced at all.</td>
+                </tr>
+                <tr>
+                  <td><strong>Your data</strong></td>
+                  <td>Where your boxes live on disk, with a button to open that folder.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="rescan">
+          <p class="eyebrow">Keeping it current</p>
+          <h2>Rescanning does not lose your work</h2>
+
+          <div class="prose">
+            <p>
+              <strong>Rescan</strong> re-queries the registry for the same box.
+              Practices that have appeared since last time get added, and details
+              that changed get refreshed &mdash; but your call statuses, your notes
+              and any emails already found are kept exactly as they were.
+            </p>
+            <p>
+              Worth doing every few weeks. New registrations are the warmest leads
+              on the sheet, and a rescan is how they reach you.
+            </p>
+            <p class="muted" style="font-size:14px">
+              Everything is stored as plain files on your machine, one folder per
+              box. There is no cloud copy &mdash; back the folder up if the work in
+              it matters.
+            </p>
+          </div>
+        </section>
+
+        <section id="trouble">
+          <p class="eyebrow">When something looks wrong</p>
+          <h2>Troubleshooting</h2>
+
+          <div class="grid-2">
+            <div class="card">
+              <h3>It won&rsquo;t let me create my box</h3>
+              <p>
+                The box is outside the United States. The registry is a US federal
+                system, so a box elsewhere can only ever come back empty &mdash;
+                Quadrant blocks it rather than wasting your time. Use <strong>Show
+                US</strong> and draw again.
+              </p>
+            </div>
+
+            <div class="card">
+              <h3>The scan returned nothing</h3>
+              <p>
+                Either no ZIP codes fall inside the box, or none of the practices
+                there match the specialties you ticked. The empty table says which.
+                Add specialties, or draw a wider box.
+              </p>
+            </div>
+
+            <div class="card">
+              <h3>Windows blocked the installer</h3>
+              <p>
+                The installer is unsigned, so SmartScreen warns about it. Click
+                <strong>More info</strong>, then <strong>Run anyway</strong>. Verify
+                the checksum on the download page first if you would rather check.
+              </p>
+            </div>
+
+            <div class="card">
+              <h3>A phone number reached the wrong place</h3>
+              <p>
+                Registry records go stale, and some numbers route to a billing
+                service. Expanding the row shows when the record was last updated
+                &mdash; an old date is the usual explanation.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section id="calling">
+          <p class="eyebrow">Before you dial</p>
+          <h2>Calling responsibly</h2>
+
+          <div class="prose">
+            <p>
+              The numbers come from a public federal registry. What you do with them
+              is governed by rules Quadrant cannot enforce for you: honor the
+              National Do Not Call registry wherever a number is a personal line,
+              say who you are and who you are calling for, and honor an opt-out the
+              first time you are asked.
+            </p>
+            <p>
+              <strong>Do not contact</strong> exists for that last one, and it
+              survives every rescan.
+            </p>
+            <p class="muted" style="font-size:14px">
+              None of this is legal advice. If you are calling at volume, check the
+              current rules for the states you are calling into.
+            </p>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <section>
+    <div class="wrap doc" style="text-align:center">
+      <h2>That&rsquo;s the whole tool.</h2>
+      <div class="cta-row" style="justify-content:center">
+        <a class="btn primary" href={href('download/')}>Download for Windows</a>
+        <a class="btn" href={REPO_URL}>Read the source</a>
+      </div>
+    </div>
+  </section>
+</Base>

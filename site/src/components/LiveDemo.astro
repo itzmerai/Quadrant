@@ -1,0 +1,418 @@
+---
+/**
+ * The product's core gesture, playable in the page.
+ *
+ * Press and drag over the map and the call sheet below re-filters to the
+ * practices inside the box, sorted by score, exactly as the app does. This is
+ * the one thing a static screenshot can never convey: that the rectangle *is*
+ * the query.
+ *
+ * The basemap is real OpenStreetMap tiles of Scottsdale, Arizona, fetched once
+ * by `tools/fetch-map.mjs` and shipped as an image — no live tile requests per
+ * visitor, nothing that can render as a grey box when a third party
+ * rate-limits.
+ *
+ * The practices are invented. A page advertising a lead tool must not publish
+ * real clinics' phone numbers, and the demo needs positions that suit the
+ * frame rather than wherever real practices happen to sit.
+ *
+ * Every number here is in 555-0100..555-0199, which the North American
+ * Numbering Plan reserves for fictional use and never assigns to a subscriber.
+ * That matters more than the disclaimer below: an earlier version of this file
+ * used realistic Phoenix-area numbers, and labelling them "invented" would not
+ * have stopped a visitor dialling a stranger. **Keep any number added here
+ * inside that range** — the area code may vary for local plausibility, the
+ * exchange and line may not.
+ *
+ * Progressive enhancement: the initial selection is rendered on the server, so
+ * the section is populated and correct with JavaScript disabled. The script
+ * only takes over once someone interacts.
+ */
+
+interface Practice {
+  /** Position as a percentage of the map, so it scales with the image. */
+  x: number;
+  y: number;
+  name: string;
+  city: string;
+  phone: string;
+  ask: string;
+  role: string;
+  score: number;
+  status: 'new' | 'no-answer' | 'follow-up' | 'interested';
+}
+
+const STATUS_LABEL: Record<Practice['status'], string> = {
+  'new': 'New',
+  'no-answer': 'No answer',
+  'follow-up': 'Follow up',
+  'interested': 'Interested',
+};
+
+const PRACTICES: Practice[] = [
+  { x: 31, y: 34, name: 'Ironwood Pediatric Dentistry', city: 'Scottsdale, AZ', phone: '(480) 555-0101', ask: 'Lisa B.', role: 'CEO', score: 100, status: 'new' },
+  { x: 38, y: 52, name: 'Orange Tree Physical Therapy', city: 'Scottsdale, AZ', phone: '(480) 555-0102', ask: 'Stacey L.', role: 'Owner', score: 96, status: 'follow-up' },
+  { x: 44, y: 30, name: 'Desert Vista Family Dental', city: 'Scottsdale, AZ', phone: '(480) 555-0103', ask: 'Kevin M.', role: 'Authorised person', score: 94, status: 'new' },
+  { x: 49, y: 63, name: 'Papago Chiropractic Center', city: 'Tempe, AZ', phone: '(602) 555-0104', ask: 'Daniel K.', role: 'President', score: 88, status: 'no-answer' },
+  { x: 55, y: 41, name: 'Camelback Optometry', city: 'Phoenix, AZ', phone: '(602) 555-0105', ask: 'Marcus W.', role: 'Manager', score: 84, status: 'new' },
+  { x: 61, y: 35, name: 'Arcadia Foot & Ankle', city: 'Phoenix, AZ', phone: '(623) 555-0106', ask: 'Renée A.', role: 'Owner', score: 81, status: 'interested' },
+  { x: 34, y: 66, name: 'South Mountain Speech Therapy', city: 'Tempe, AZ', phone: '(480) 555-0107', ask: 'Priya N.', role: 'Director', score: 78, status: 'new' },
+  { x: 42, y: 44, name: 'Cactus Wren Family Medicine', city: 'Scottsdale, AZ', phone: '(480) 555-0108', ask: 'Antonia T.', role: 'Owner', score: 76, status: 'follow-up' },
+  { x: 58, y: 58, name: 'Tempe Butte Counselling', city: 'Tempe, AZ', phone: '(480) 555-0109', ask: 'Grace O.', role: 'Owner', score: 72, status: 'new' },
+  { x: 66, y: 48, name: 'Biltmore Dermatology', city: 'Phoenix, AZ', phone: '(602) 555-0110', ask: 'Stephanie P.', role: 'Physician', score: 70, status: 'new' },
+  { x: 36, y: 28, name: 'McDowell Dental Studio', city: 'Scottsdale, AZ', phone: '(480) 555-0111', ask: 'Alan R.', role: 'Owner', score: 68, status: 'no-answer' },
+  { x: 52, y: 48, name: 'Sonoran Physiotherapy', city: 'Scottsdale, AZ', phone: '(480) 555-0112', ask: 'Bea H.', role: 'Practice lead', score: 64, status: 'new' },
+  { x: 64, y: 66, name: 'Ahwatukee Podiatry', city: 'Phoenix, AZ', phone: '(602) 555-0113', ask: 'Tom G.', role: 'Owner', score: 61, status: 'new' },
+  { x: 46, y: 70, name: 'Mill Avenue Optical', city: 'Tempe, AZ', phone: '(480) 555-0114', ask: 'Jenna F.', role: 'Manager', score: 58, status: 'interested' },
+  { x: 29, y: 46, name: 'Pinnacle Peak Orthodontics', city: 'Scottsdale, AZ', phone: '(480) 555-0115', ask: 'Owen D.', role: 'Owner', score: 55, status: 'new' },
+  { x: 68, y: 28, name: 'Paradise Valley Wellness', city: 'Phoenix, AZ', phone: '(602) 555-0116', ask: 'Nadia S.', role: 'Director', score: 52, status: 'new' },
+  { x: 40, y: 24, name: 'Shea Boulevard Dentistry', city: 'Scottsdale, AZ', phone: '(480) 555-0117', ask: 'Chris V.', role: 'Owner', score: 48, status: 'no-answer' },
+  { x: 57, y: 71, name: 'Kyrene Speech & Language', city: 'Tempe, AZ', phone: '(480) 555-0118', ask: 'Hana K.', role: 'Owner', score: 44, status: 'new' },
+  { x: 33, y: 57, name: 'Indian Bend Chiropractic', city: 'Scottsdale, AZ', phone: '(480) 555-0119', ask: 'Luis E.', role: 'Owner', score: 41, status: 'new' },
+  { x: 70, y: 57, name: 'Squaw Peak Family Care', city: 'Phoenix, AZ', phone: '(602) 555-0120', ask: 'Dana J.', role: 'Manager', score: 38, status: 'new' },
+
+  // Outside the default box, so dragging elsewhere genuinely changes the list.
+  { x: 10, y: 30, name: 'Litchfield Park Dental', city: 'Litchfield Park, AZ', phone: '(623) 555-0121', ask: 'Marco B.', role: 'Owner', score: 86, status: 'new' },
+  { x: 16, y: 72, name: 'Estrella Physical Therapy', city: 'Goodyear, AZ', phone: '(623) 555-0122', ask: 'Ivy L.', role: 'Director', score: 74, status: 'new' },
+  { x: 8, y: 58, name: 'Avondale Optometry', city: 'Avondale, AZ', phone: '(623) 555-0123', ask: 'Peter Q.', role: 'Owner', score: 66, status: 'no-answer' },
+  { x: 13, y: 44, name: 'Verrado Family Medicine', city: 'Buckeye, AZ', phone: '(623) 555-0124', ask: 'Sofia M.', role: 'Physician', score: 59, status: 'new' },
+  { x: 79, y: 40, name: 'Mesa Riverview Chiropractic', city: 'Mesa, AZ', phone: '(480) 555-0125', ask: 'Gary N.', role: 'Owner', score: 92, status: 'interested' },
+  { x: 88, y: 62, name: 'Superstition Dental Group', city: 'Apache Junction, AZ', phone: '(480) 555-0126', ask: 'Wendy C.', role: 'Manager', score: 80, status: 'new' },
+  { x: 92, y: 28, name: 'Red Mountain Podiatry', city: 'Mesa, AZ', phone: '(480) 555-0127', ask: 'Errol T.', role: 'Owner', score: 63, status: 'new' },
+  { x: 84, y: 46, name: 'Gilbert Road Counselling', city: 'Mesa, AZ', phone: '(480) 555-0128', ask: 'Ana P.', role: 'Owner', score: 50, status: 'new' },
+  { x: 22, y: 20, name: 'Deer Valley Dental Arts', city: 'Phoenix, AZ', phone: '(623) 555-0129', ask: 'Rex A.', role: 'Owner', score: 71, status: 'new' },
+  { x: 75, y: 76, name: 'Chandler Heights Optical', city: 'Chandler, AZ', phone: '(480) 555-0130', ask: 'Mina Z.', role: 'Manager', score: 45, status: 'new' },
+];
+
+/** The selection the page loads with, so it is populated before any input. */
+const DEFAULT_BOX = { left: 26, top: 22, width: 44, height: 52 };
+
+function inside(p: Practice, b: typeof DEFAULT_BOX) {
+  return (
+    p.x >= b.left && p.x <= b.left + b.width &&
+    p.y >= b.top && p.y <= b.top + b.height
+  );
+}
+
+const initial = PRACTICES.filter((p) => inside(p, DEFAULT_BOX)).sort((a, b) => b.score - a.score);
+const ROWS_SHOWN = 8;
+
+const band = (s: number) => (s >= 75 ? 'hot' : s >= 50 ? 'warm' : 'cool');
+
+/** Build-time Phoenix clock; the script refreshes it to the real current time. */
+const phoenixNow = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/Phoenix', hour: 'numeric', minute: '2-digit', hour12: true,
+}).format(new Date());
+---
+
+<div
+  class="demo"
+  data-demo
+  data-practices={JSON.stringify(PRACTICES)}
+  data-rows-shown={ROWS_SHOWN}
+>
+  <figure class="mapshot" data-demo-map>
+    <picture>
+      <source srcset={`${import.meta.env.BASE_URL.replace(/\/$/, '')}/map-scottsdale.webp`} type="image/webp" />
+      <img
+        class="mapshot-tiles"
+        src={`${import.meta.env.BASE_URL.replace(/\/$/, '')}/map-scottsdale-fallback.png`}
+        alt="A map of the Scottsdale, Arizona area. Drag across it to select practices."
+        width="1400"
+        height="600"
+        loading="eager"
+        decoding="async"
+        draggable="false"
+      />
+    </picture>
+
+    <div class="mapshot-overlay" data-demo-overlay>
+      <div
+        class="mapshot-box"
+        data-demo-box
+        style={`left:${DEFAULT_BOX.left}%;top:${DEFAULT_BOX.top}%;width:${DEFAULT_BOX.width}%;height:${DEFAULT_BOX.height}%`}
+      >
+        <span class="mh mh-nw" /><span class="mh mh-ne" />
+        <span class="mh mh-sw" /><span class="mh mh-se" />
+        <span class="mapshot-label" data-demo-label>
+          Scottsdale Dentists · {initial.length} leads
+        </span>
+      </div>
+
+      {PRACTICES.map((p, i) => (
+        <span
+          class={`mapshot-pin ${inside(p, DEFAULT_BOX) ? 'in' : 'out'}`}
+          data-demo-pin={i}
+          style={`left:${p.x}%;top:${p.y}%`}
+          title={p.name}
+        />
+      ))}
+    </div>
+
+    <div class="mapshot-hint" data-demo-hint>
+      <strong>Press and drag</strong> to draw your own box
+    </div>
+
+    <div class="mapshot-controls">
+      <button class="mapshot-btn" type="button" data-demo-reset>Reset</button>
+    </div>
+
+    <p class="mapshot-attrib">
+      Basemap &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors
+    </p>
+  </figure>
+
+  <div class="appshot-split" aria-hidden="true"><span /></div>
+
+  <figure class="preview">
+    <div class="preview-chrome">
+      <span class="dot" /><span class="dot" /><span class="dot" />
+      <span class="preview-title">Quadrant — Scottsdale Dentists</span>
+    </div>
+
+    <div class="preview-body">
+      <div class="preview-filters">
+        <span class="fake-input">Search practice, contact, city, phone</span>
+        <span class="fake-select">All specialties</span>
+        <span class="fake-select">Any contact</span>
+        <span class="fake-count tnum" data-demo-count>
+          {Math.min(initial.length, ROWS_SHOWN)} of {initial.length}
+        </span>
+      </div>
+
+      <table class="preview-table">
+        <thead>
+          <tr>
+            <th>Score</th>
+            <th>Practice</th>
+            <th>Phone</th>
+            <th>Ask for</th>
+            <th>Their time</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody data-demo-rows>
+          {initial.slice(0, ROWS_SHOWN).map((p) => (
+            <tr>
+              <td><span class={`p-score ${band(p.score)}`}>{p.score}</span></td>
+              <td>
+                <span class="p-name">{p.name}</span>
+                <span class="p-sub">{p.city}</span>
+              </td>
+              <td class="tnum">{p.phone}</td>
+              <td>
+                <span>{p.ask}</span>
+                <span class="p-sub">{p.role}</span>
+              </td>
+              <td class="tnum"><span class="p-clock open" data-demo-clock>{phoenixNow}</span></td>
+              <td><span class={`p-pill s-${p.status}`}>{STATUS_LABEL[p.status]}</span></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <p class="preview-more" data-demo-more hidden></p>
+    </div>
+  </figure>
+
+  <figcaption class="preview-cap muted">
+    A working demo. The map is real OpenStreetMap data; the practices are
+    invented and every number is a reserved 555 one that cannot be dialled — a
+    page advertising a lead tool should not publish real clinics' numbers. In
+    the app the box queries the federal provider registry instead.
+  </figcaption>
+</div>
+
+<script>
+  interface DemoPractice {
+    x: number; y: number; name: string; city: string; phone: string;
+    ask: string; role: string; score: number; status: string;
+  }
+
+  const STATUS_LABEL: Record<string, string> = {
+    'new': 'New',
+    'no-answer': 'No answer',
+    'follow-up': 'Follow up',
+    'interested': 'Interested',
+  };
+
+  const band = (s: number) => (s >= 75 ? 'hot' : s >= 50 ? 'warm' : 'cool');
+
+  const root = document.querySelector<HTMLElement>('[data-demo]');
+  if (root) {
+    const map = root.querySelector<HTMLElement>('[data-demo-map]')!;
+    const overlay = root.querySelector<HTMLElement>('[data-demo-overlay]')!;
+    const boxEl = root.querySelector<HTMLElement>('[data-demo-box]')!;
+    const labelEl = root.querySelector<HTMLElement>('[data-demo-label]')!;
+    const hintEl = root.querySelector<HTMLElement>('[data-demo-hint]')!;
+    const rowsEl = root.querySelector<HTMLElement>('[data-demo-rows]')!;
+    const countEl = root.querySelector<HTMLElement>('[data-demo-count]')!;
+    const moreEl = root.querySelector<HTMLElement>('[data-demo-more]')!;
+    const resetBtn = root.querySelector<HTMLButtonElement>('[data-demo-reset]')!;
+    const pins = Array.from(root.querySelectorAll<HTMLElement>('[data-demo-pin]'));
+
+    const practices: DemoPractice[] = JSON.parse(root.dataset.practices ?? '[]');
+    const rowsShown = Number(root.dataset.rowsShown ?? 8);
+    const DEFAULT_BOX = { left: 26, top: 22, width: 44, height: 52 };
+
+    /** The practice's local clock. Real, and the point of the column. */
+    const clockFor = () =>
+      new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/Phoenix', hour: 'numeric', minute: '2-digit', hour12: true,
+      }).format(new Date());
+
+    const officeHours = () => {
+      const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/Phoenix', hour: 'numeric', hour12: false, weekday: 'short',
+      }).formatToParts(new Date());
+      const hour = Number(parts.find((p) => p.type === 'hour')?.value ?? -1);
+      const day = parts.find((p) => p.type === 'weekday')?.value ?? '';
+      if (day === 'Sat' || day === 'Sun') return false;
+      return hour >= 9 && hour < 17;
+    };
+
+    function selected(b: typeof DEFAULT_BOX) {
+      return practices
+        .map((p, i) => ({ p, i }))
+        .filter(({ p }) =>
+          p.x >= b.left && p.x <= b.left + b.width &&
+          p.y >= b.top && p.y <= b.top + b.height,
+        )
+        .sort((a, z) => z.p.score - a.p.score);
+    }
+
+    function render(b: typeof DEFAULT_BOX) {
+      const hits = selected(b);
+      const hitSet = new Set(hits.map((h) => h.i));
+      const clock = clockFor();
+      const open = officeHours();
+
+      pins.forEach((pin, i) => {
+        pin.classList.toggle('in', hitSet.has(i));
+        pin.classList.toggle('out', !hitSet.has(i));
+      });
+
+      labelEl.textContent = `Your box · ${hits.length} lead${hits.length === 1 ? '' : 's'}`;
+      countEl.textContent = `${Math.min(hits.length, rowsShown)} of ${hits.length}`;
+
+      if (hits.length === 0) {
+        rowsEl.innerHTML =
+          '<tr><td colspan="6" class="preview-empty">' +
+          'Nothing inside this box. In the app that means no ZIP codes fall ' +
+          'inside it, or no practices there match the specialties you picked.' +
+          '</td></tr>';
+        moreEl.hidden = true;
+        return;
+      }
+
+      rowsEl.innerHTML = hits
+        .slice(0, rowsShown)
+        .map(({ p }) => `
+          <tr>
+            <td><span class="p-score ${band(p.score)}">${p.score}</span></td>
+            <td>
+              <span class="p-name">${p.name}</span>
+              <span class="p-sub">${p.city}</span>
+            </td>
+            <td class="tnum">${p.phone}</td>
+            <td>
+              <span>${p.ask}</span>
+              <span class="p-sub">${p.role}</span>
+            </td>
+            <td class="tnum"><span class="p-clock${open ? ' open' : ''}">${clock}</span></td>
+            <td><span class="p-pill s-${p.status}">${STATUS_LABEL[p.status] ?? p.status}</span></td>
+          </tr>`)
+        .join('');
+
+      const rest = hits.length - rowsShown;
+      moreEl.hidden = rest <= 0;
+      if (rest > 0) moreEl.textContent = `+ ${rest} more in the app`;
+    }
+
+    function place(b: typeof DEFAULT_BOX) {
+      boxEl.style.left = `${b.left}%`;
+      boxEl.style.top = `${b.top}%`;
+      boxEl.style.width = `${b.width}%`;
+      boxEl.style.height = `${b.height}%`;
+    }
+
+    /* ---- press and drag ---- */
+
+    let origin: { x: number; y: number } | null = null;
+
+    const pct = (e: PointerEvent) => {
+      const r = map.getBoundingClientRect();
+      return {
+        x: Math.min(100, Math.max(0, ((e.clientX - r.left) / r.width) * 100)),
+        y: Math.min(100, Math.max(0, ((e.clientY - r.top) / r.height) * 100)),
+      };
+    };
+
+    const boxFrom = (a: { x: number; y: number }, b: { x: number; y: number }) => ({
+      left: Math.min(a.x, b.x),
+      top: Math.min(a.y, b.y),
+      width: Math.abs(a.x - b.x),
+      height: Math.abs(a.y - b.y),
+    });
+
+    overlay.addEventListener('pointerdown', (e) => {
+      // Ignore the reset button and anything else interactive.
+      if ((e.target as HTMLElement).closest('button')) return;
+      e.preventDefault();
+      origin = pct(e);
+      overlay.setPointerCapture(e.pointerId);
+      map.classList.add('drawing');
+      hintEl.hidden = true;
+      place({ ...origin, left: origin.x, top: origin.y, width: 0, height: 0 } as never);
+    });
+
+    overlay.addEventListener('pointermove', (e) => {
+      if (!origin) return;
+      const b = boxFrom(origin, pct(e));
+      place(b);
+      // Live feedback while dragging is the whole point.
+      render(b);
+    });
+
+    const end = (e: PointerEvent) => {
+      if (!origin) return;
+      const b = boxFrom(origin, pct(e));
+      origin = null;
+      map.classList.remove('drawing');
+      try { overlay.releasePointerCapture(e.pointerId); } catch { /* already gone */ }
+
+      // A click without a drag is not a box; restore rather than blank the list.
+      if (b.width < 2 || b.height < 2) {
+        place(DEFAULT_BOX);
+        render(DEFAULT_BOX);
+        labelEl.textContent = `Scottsdale Dentists · ${selected(DEFAULT_BOX).length} leads`;
+        return;
+      }
+      place(b);
+      render(b);
+    };
+
+    overlay.addEventListener('pointerup', end);
+    overlay.addEventListener('pointercancel', end);
+
+    resetBtn.addEventListener('click', () => {
+      place(DEFAULT_BOX);
+      render(DEFAULT_BOX);
+      labelEl.textContent = `Scottsdale Dentists · ${selected(DEFAULT_BOX).length} leads`;
+      hintEl.hidden = false;
+    });
+
+    // Refresh the clock so it is the real Phoenix time, not the build's.
+    render(DEFAULT_BOX);
+    labelEl.textContent = `Scottsdale Dentists · ${selected(DEFAULT_BOX).length} leads`;
+    setInterval(() => {
+      const b = {
+        left: parseFloat(boxEl.style.left),
+        top: parseFloat(boxEl.style.top),
+        width: parseFloat(boxEl.style.width),
+        height: parseFloat(boxEl.style.height),
+      };
+      render(b);
+    }, 30_000);
+  }
+</script>
