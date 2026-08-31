@@ -1,0 +1,255 @@
+---
+import Base from '../layouts/Base.astro';
+import LiveDemo from '../components/LiveDemo.astro';
+// The landing page sends people to the download *page*, not straight at the
+// installer — the checksum and the SmartScreen warning belong in front of the
+// file, not behind it.
+import { REPO_URL } from '../lib/release';
+
+const base = import.meta.env.BASE_URL;
+const href = (p: string) => (base.endsWith('/') ? base : base + '/') + p.replace(/^\//, '');
+---
+
+<Base
+  title="Quadrant — a call sheet for medical virtual assistants"
+  description="Draw a box on the map. Get every small medical practice inside it, with a phone number and the name of the person who answers."
+>
+  <section class="hero">
+    <div class="wrap">
+      <h1>Draw a box on the map. Get the phone numbers.</h1>
+      <p class="lede">
+        Quadrant finds every small medical practice inside an area you choose and
+        hands you a ranked call sheet — practice name, phone number, and the name
+        of the person who actually answers. Built for medical virtual assistants
+        doing their own outreach.
+      </p>
+
+      <div class="cta-row">
+        <a class="btn primary" href={href('download/')}>
+          Download for Windows
+        </a>
+        <a class="btn" href={href('guide/')}>How it works</a>
+        <a class="btn" href={REPO_URL}>Read the source</a>
+      </div>
+
+      <p class="muted" style="margin-top:14px;font-size:14px">
+        Free. No account, no API key, no subscription. Runs on your machine.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap-wide">
+      <LiveDemo />
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap-wide">
+      <p class="eyebrow">The problem it solves</p>
+      <h2>Finding clinics is easy. Reaching them is the hard part.</h2>
+      <div class="prose">
+        <p>
+          Every mapping service can tell you where the clinics are. Almost none
+          will tell you how to reach them. That gap is the whole problem, so it
+          was worth measuring rather than assuming.
+        </p>
+      </div>
+
+      <div class="tblwrap" style="margin-top:22px">
+        <table class="tbl">
+          <thead>
+            <tr>
+              <th>Source</th>
+              <th>Area measured</th>
+              <th class="num">Reachable by any contact channel</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>NPPES provider registry</strong></td>
+              <td>Scottsdale, AZ — dental practices</td>
+              <td class="num"><strong>100%</strong></td>
+            </tr>
+            <tr>
+              <td>OpenStreetMap</td>
+              <td>Phoenix / Scottsdale — 548 places</td>
+              <td class="num">29.9%</td>
+            </tr>
+            <tr>
+              <td>OpenStreetMap</td>
+              <td>Metro Manila — 2,904 places</td>
+              <td class="num">13.7%</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p class="muted" style="margin-top:12px;font-size:14px">
+        Measured with live queries before the app was built. Rerun them before
+        trusting them a year from now.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <p class="eyebrow">Where the data comes from</p>
+      <h2>A federal registry, not a scraper.</h2>
+      <div class="prose">
+        <p>
+          Quadrant reads the <strong>CMS National Plan &amp; Provider
+          Enumeration System</strong> — the US government's registry of every
+          licensed provider and practice. It is published as public record and
+          needs no API key, no signup and no payment.
+        </p>
+        <p>
+          It carries something no mapping service does: a named authorised
+          official with a direct phone line, on every practice record. Asking
+          for someone by name is a different call from asking for whoever
+          handles scheduling.
+        </p>
+        <p>
+          It also records when a practice was first registered, which is the
+          warmest signal available — a brand-new clinic has not hired admin
+          staff yet. Quadrant sorts by it.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap-wide">
+      <p class="eyebrow">What you get</p>
+      <h2>A call sheet, in call order.</h2>
+      <div class="grid-2" style="margin-top:24px">
+        <div class="card">
+          <h3>Named territories</h3>
+          <p>
+            Draw a box, name it, and it keeps its own leads, call statuses and
+            notes. Rescan it later and your work survives — registry fields
+            refresh, your notes do not get overwritten.
+          </p>
+        </div>
+        <div class="card">
+          <h3>Ranked, with reasons</h3>
+          <p>
+            Scored on practice age, record freshness and how well the specialty
+            fits. Every lead shows why it scored what it did, so you can
+            disagree with it.
+          </p>
+        </div>
+        <div class="card">
+          <h3>Their local time</h3>
+          <p>
+            Each row shows the clock at the practice, not yours, and an
+            open-now filter you set to your own calling window. No more dialling
+            a closed office from another continent.
+          </p>
+        </div>
+        <div class="card">
+          <h3>Call tracking</h3>
+          <p>
+            New, no answer, follow up, interested, do not contact — plus a note
+            per lead. Export what is on screen to CSV whenever you want it
+            somewhere else.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap-wide">
+      <p class="eyebrow">Before you use it</p>
+      <h2>What it will not do.</h2>
+
+      <div class="grid-2" style="margin-top:24px">
+        <div class="candid">
+          <h3>United States only</h3>
+          <p>
+            The registry Quadrant depends on is a US federal system. No other
+            country publishes an equivalent, so a box drawn elsewhere returns
+            nothing — and the app tells you so rather than coming back empty.
+          </p>
+        </div>
+
+        <div class="candid">
+          <h3>Email coverage is poor</h3>
+          <p>
+            The registry holds no email addresses and no websites. Those come
+            from finding a practice's site and reading it, which works perhaps a
+            quarter to a third of the time. Phone is the channel; email is a
+            bonus.
+          </p>
+        </div>
+
+        <div class="candid">
+          <h3>Records go stale</h3>
+          <p>
+            Providers are not diligent about updating the registry, and some
+            numbers route to a billing service rather than a front desk.
+            Quadrant sinks stale records in the ranking instead of hiding the
+            problem.
+          </p>
+        </div>
+
+        <div class="candid">
+          <h3>Not audited, not signed</h3>
+          <p>
+            This is early software written by one person. The installer is
+            unsigned, so Windows will warn you. Reading the source is the only
+            real assurance on offer today.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <p class="eyebrow">Calling responsibly</p>
+      <h2>The data is public. The calls are still your responsibility.</h2>
+
+      <div class="prose">
+        <p>
+          Quadrant hands you phone numbers from a public federal registry. What
+          you do with them is governed by rules the tool cannot enforce for you:
+        </p>
+        <ul class="steps">
+          <li>
+            Honor the National Do Not Call registry wherever a number turns out
+            to be a personal line rather than a business one.
+          </li>
+          <li>
+            Identify yourself and who you are calling on behalf of, at the start
+            of the call.
+          </li>
+          <li>
+            Honor an opt-out the first time you are asked. Quadrant has a
+            <strong>Do not contact</strong> status for exactly this, and it
+            survives every rescan.
+          </li>
+        </ul>
+        <p class="muted" style="font-size:14px">
+          None of this is legal advice. If you are calling at volume, check the
+          current rules for the states you are calling into.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap" style="text-align:center">
+      <h2>Try it on one neighbourhood.</h2>
+      <p class="lede" style="max-width:52ch;margin-inline:auto">
+        Draw a small box, run a scan, and see whether the list is worth calling
+        before you commit to anything.
+      </p>
+      <div class="cta-row" style="justify-content:center">
+        <a class="btn primary" href={href('download/')}>Download for Windows</a>
+        <a class="btn" href={REPO_URL}>Read the source</a>
+      </div>
+    </div>
+  </section>
+</Base>

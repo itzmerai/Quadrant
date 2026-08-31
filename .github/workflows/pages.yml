@@ -1,0 +1,81 @@
+# Builds and deploys the marketing site to GitHub Pages.
+#
+# Independent of the release workflow on purpose: fixing a typo must not
+# require cutting a version, and a failed Windows build must not block a copy
+# change. The site reads the latest release's metadata at build time, so a new
+# release shows up here on the next deploy without either workflow calling the
+# other. A manual run is how you pick one up without waiting for a site change.
+name: Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'site/**'
+      - 'apps/ui/src/styles/tokens.css'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+# Read-only on the repository. This workflow has no reason to write to it.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time. A queued run supersedes an older one rather than
+# racing it; in-progress runs finish so a deploy is never half-applied.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Install site dependencies
+        working-directory: site
+        run: npm ci
+
+      - name: Check types
+        working-directory: site
+        run: npm run check
+
+      - name: Test
+        working-directory: site
+        run: npm test
+
+      - name: Build
+        working-directory: site
+        env:
+          # A project site is served from a subpath; without a matching base
+          # every asset 404s. A custom domain later means SITE_BASE=/.
+          SITE_BASE: /${{ github.event.repository.name }}/
+          SITE_ORIGIN: https://${{ github.repository_owner }}.github.io
+          # Lets the release lookup use the run's token rather than an
+          # anonymous request, which is rate-limited far more aggressively.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run build
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

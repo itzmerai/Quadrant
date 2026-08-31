@@ -4,63 +4,10 @@
    reserved for lead temperature and call state.
    ============================================================ */
 
-:root {
-  --paper: #fafbfc;
-  --surface: #ffffff;
-  --sunken: #eef1f5;
-  --line: #d8dee7;
-  --line-soft: #e6ebf1;
-
-  --ink: #0d1620;
-  --ink-2: #3d4855;
-  --muted: #6b7684;
-
-  --accent: #1f5fd0;
-  --accent-soft: #e6eefc;
-  --accent-line: #b9cff2;
-
-  --hot: #b4441f;
-  --hot-soft: #fbeae3;
-  --warm: #8a6410;
-  --warm-soft: #faf1dd;
-  --cool: #56626f;
-  --cool-soft: #eceff3;
-
-  --good: #12764f;
-  --danger: #a5372a;
-
-  --radius: 4px;
-  --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --paper: #0b1018;
-    --surface: #121a24;
-    --sunken: #0e151e;
-    --line: #253040;
-    --line-soft: #1b2430;
-
-    --ink: #e7ecf2;
-    --ink-2: #b4becb;
-    --muted: #8996a6;
-
-    --accent: #5f97f6;
-    --accent-soft: #16273f;
-    --accent-line: #2a4470;
-
-    --hot: #e08055;
-    --hot-soft: #2c1d16;
-    --warm: #d3a44a;
-    --warm-soft: #2a2214;
-    --cool: #8b98a6;
-    --cool-soft: #1a222d;
-
-    --good: #40b187;
-    --danger: #e2745c;
-  }
-}
+/* Tokens live in tokens.css so the marketing site can import the real
+   palette rather than copy it. Imported first so component rules below
+   resolve against them. */
+@import './tokens.css';
 
 * { box-sizing: border-box; }
 

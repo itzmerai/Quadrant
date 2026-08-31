@@ -1,0 +1,214 @@
+---
+import Base from '../layouts/Base.astro';
+import {
+  DOWNLOAD_URL,
+  INSTALLER_NAME,
+  RELEASES_URL,
+  REPO_URL,
+  latestRelease,
+  networkFetchers,
+} from '../lib/release';
+
+/**
+ * The version this repo declares, used only when the API cannot be read.
+ * Kept in step with apps/desktop/tauri.conf.json by hand; it is a fallback,
+ * not the source of truth.
+ */
+const FALLBACK_VERSION = '0.1.0';
+
+const release = await latestRelease(
+  networkFetchers(process.env.GITHUB_TOKEN),
+  FALLBACK_VERSION,
+);
+
+const published = release.publishedAt
+  ? new Date(release.publishedAt).toLocaleDateString('en-GB', {
+      day: 'numeric', month: 'long', year: 'numeric',
+    })
+  : null;
+
+const base = import.meta.env.BASE_URL;
+const href = (p: string) => (base.endsWith('/') ? base : base + '/') + p.replace(/^\//, '');
+
+/**
+ * The nav rail mirrors the sections actually rendered below. Verification only
+ * exists when there is a published release to verify, so it is conditional in
+ * both places from the same flag.
+ */
+const isLive = release.state === 'live';
+const sections = [
+  ...(isLive ? [{ id: 'verify', label: 'Verify it first' }] : []),
+  { id: 'smartscreen', label: 'The Windows warning' },
+  { id: 'requirements', label: 'System requirements' },
+  { id: 'candid', label: 'Know what this is' },
+];
+---
+
+<Base
+  title="Download Quadrant for Windows"
+  description="Quadrant for Windows 10 and 11, 64-bit. Free, unsigned, and verifiable by checksum."
+>
+  <section class="hero" style="padding-bottom:40px">
+    <div class="wrap doc">
+      <a class="backlink" href={href("")}>Back to home</a>
+      <h1>Download Quadrant</h1>
+      <p class="lede">Windows 10 and 11 &middot; 64-bit</p>
+
+      {isLive ? (
+        <>
+          <div class="cta-row">
+            <a class="btn primary" href={DOWNLOAD_URL}>
+              Download {INSTALLER_NAME}
+              <span class="btn-sub">v{release.version}</span>
+            </a>
+            <a class="btn" href={RELEASES_URL}>All releases</a>
+          </div>
+          {published && (
+            <p class="muted" style="margin-top:14px;font-size:14px">
+              Version {release.version}, published {published}.
+            </p>
+          )}
+        </>
+      ) : (
+        <div class="note prose" style="margin-top:24px">
+          {release.state === 'none' ? (
+            <p>
+              <strong>No release has been published yet.</strong> The code is on
+              GitHub and can be built from source; there is no installer to
+              download at this moment.
+            </p>
+          ) : (
+            <p>
+              <strong>The release could not be read just now.</strong> GitHub was
+              unreachable when this page was built, so the version and checksum
+              below are not available. The releases page has whatever is current.
+            </p>
+          )}
+          <p>
+            <a href={RELEASES_URL}>Open the releases page</a> &middot;
+            <a href={REPO_URL}>Read the source</a>
+          </p>
+        </div>
+      )}
+    </div>
+  </section>
+
+  <div class="wrap doc">
+    <div class="doc-grid">
+      <nav class="doc-nav" aria-label="On this page">
+        <p class="doc-nav-title">On this page</p>
+        <ol>
+          {sections.map((s) => (
+            <li><a href={`#${s.id}`}>{s.label}</a></li>
+          ))}
+        </ol>
+      </nav>
+
+      <div class="doc-body">
+        {isLive && (
+          <section id="verify">
+            <p class="eyebrow">Verify it first</p>
+            <h2>Check the file matches before you run it.</h2>
+
+            <div class="prose">
+              {release.sha256 ? (
+                <>
+                  <p>
+                    The SHA-256 of the installer published with this release:
+                  </p>
+                  <p class="hash">{release.sha256}</p>
+                  <p>Compare it against your download in PowerShell:</p>
+                  <pre class="cmd">Get-FileHash .\{INSTALLER_NAME} -Algorithm SHA256</pre>
+                  <p class="muted" style="font-size:14px;margin-top:12px">
+                    If the hashes differ, do not run the file. Report it on the
+                    repository instead.
+                  </p>
+                </>
+              ) : (
+                <p>
+                  This release did not publish a checksum asset, so there is no
+                  hash to compare against here. You can still verify by building
+                  from source and comparing behaviour, or wait for a release that
+                  includes one.
+                </p>
+              )}
+            </div>
+          </section>
+        )}
+
+        <section id="smartscreen">
+          <p class="eyebrow">Expect this</p>
+          <h2>Windows will warn you. The installer is unsigned.</h2>
+
+          <div class="prose">
+            <p>
+              Code-signing certificates cost money and Quadrant does not have one
+              yet. Windows SmartScreen will show <em>&ldquo;Windows protected your
+              PC&rdquo;</em> because it has not seen this file before &mdash; not
+              because anything is known to be wrong with it.
+            </p>
+            <ol class="steps">
+              <li>Click <strong>More info</strong>.</li>
+              <li>Click <strong>Run anyway</strong>.</li>
+            </ol>
+            <p>
+              If that trade is not one you want to make, the checksum above and
+              the source are the alternative: read what it does, build it
+              yourself.
+            </p>
+          </div>
+        </section>
+
+        <section id="requirements">
+          <p class="eyebrow">What it needs</p>
+          <h2>System requirements</h2>
+
+          <dl class="kv">
+            <dt>Operating system</dt>
+            <dd>Windows 10 or 11, 64-bit</dd>
+
+            <dt>WebView2</dt>
+            <dd>Required. Already present on Windows 11, and fetched automatically on Windows 10 if missing.</dd>
+
+            <dt>Disk space</dt>
+            <dd>About 20 MB, plus whatever your saved leads grow to</dd>
+
+            <dt>Administrator rights</dt>
+            <dd>Not needed</dd>
+
+            <dt>Internet</dt>
+            <dd>Needed to scan. Your saved leads are readable offline.</dd>
+
+            <dt>Coverage</dt>
+            <dd>United States only &mdash; the provider registry it reads is a US federal system</dd>
+          </dl>
+        </section>
+
+        <section id="candid">
+          <p class="eyebrow">Before you rely on it</p>
+          <h2>Know what you are installing.</h2>
+
+          <div class="candid prose">
+            <p>
+              This is early software written by one person. It has not been
+              audited by anyone else, the installer is not signed, and only
+              Windows is supported. Reading the source is the real assurance on
+              offer.
+            </p>
+            <p>
+              Your leads are stored as plain files on your machine. Nothing is
+              sent anywhere except the public registry queries the app makes on
+              your behalf. Back the folder up if the work in it matters &mdash;
+              there is no cloud copy.
+            </p>
+          </div>
+
+          <p style="margin-top:20px">
+            <a href={href('guide/')}>Read the guide</a> &middot;
+            <a href={REPO_URL}>Read the source on GitHub</a>
+          </p>
+        </section>
+      </div>
+    </div>
+  </div>
+</Base>
