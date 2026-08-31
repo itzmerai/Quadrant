@@ -83,9 +83,54 @@ export function rankEmail(email: string): RankedEmail {
   return { email: lower, score: 50, label: 'Unknown inbox' };
 }
 
+/**
+ * Cloudflare rewrites addresses into a hex blob to defeat scrapers. The first
+ * byte is an XOR key for the rest, so the real address is recoverable.
+ */
+export function decodeCloudflare(html: string): string[] {
+  const out: string[] = [];
+  const re = /data-cfemail="([0-9a-f]+)"/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html))) {
+    const hex = m[1]!;
+    try {
+      const key = parseInt(hex.slice(0, 2), 16);
+      let decoded = '';
+      for (let i = 2; i < hex.length; i += 2) {
+        decoded += String.fromCharCode(parseInt(hex.slice(i, i + 2), 16) ^ key);
+      }
+      if (decoded.includes('@')) out.push(decoded);
+    } catch {
+      /* malformed blob */
+    }
+  }
+  return out;
+}
+
+/** "name (at) practice (dot) com" and friends. */
+export function decodeObfuscated(html: string): string[] {
+  const text = html.replace(/<[^>]+>/g, ' ');
+  const re =
+    /([a-z0-9._%+-]+)\s*(?:\(at\)|\[at\]|\s+at\s+|&#64;)\s*([a-z0-9.-]+)\s*(?:\(dot\)|\[dot\]|\s+dot\s+)\s*([a-z]{2,24})/gi;
+  const out: string[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) out.push((m[1] + '@' + m[2] + '.' + m[3]).toLowerCase());
+  return out;
+}
+
+/** Some practices publish no address at all, only a form. Worth knowing. */
+export function findContactForm(html: string, pageUrl: string): string | null {
+  const hasForm = /<form[\s\S]{0,4000}?(type=["']email["']|name=["'][^"']*email|placeholder=["'][^"']*email)/i;
+  return hasForm.test(html) ? pageUrl : null;
+}
+
 /** Extract, clean, dedupe and rank every address on a page. */
 export function extractEmails(html: string, siteDomain?: string): RankedEmail[] {
   const found = new Set<string>();
+
+  for (const decoded of [...decodeCloudflare(html), ...decodeObfuscated(html)]) {
+    if (!isJunkEmail(decoded)) found.add(decoded);
+  }
 
   for (const raw of html.match(EMAIL_RE) ?? []) {
     const email = raw.toLowerCase().replace(/\.$/, '');

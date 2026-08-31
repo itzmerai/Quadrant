@@ -2,7 +2,9 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Read and write territory files, and reach the provider registries.",
-  "windows": ["main"],
+  "windows": [
+    "main"
+  ],
   "permissions": [
     "core:default",
     "fs:allow-appdata-read-recursive",
@@ -11,12 +13,23 @@
     {
       "identifier": "http:default",
       "allow": [
-        { "url": "https://npiregistry.cms.hhs.gov/*" },
-        { "url": "https://overpass-api.de/*" },
-        { "url": "https://*.tile.openstreetmap.org/*" },
-        { "url": "http://*/*" },
-        { "url": "https://*/*" }
+        {
+          "url": "https://npiregistry.cms.hhs.gov/*"
+        },
+        {
+          "url": "https://overpass-api.de/*"
+        },
+        {
+          "url": "https://*.tile.openstreetmap.org/*"
+        },
+        {
+          "url": "http://*/*"
+        },
+        {
+          "url": "https://*/*"
+        }
       ]
-    }
+    },
+    "opener:allow-open-url"
   ]
 }

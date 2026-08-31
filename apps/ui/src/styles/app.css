@@ -499,3 +499,25 @@ tr.spacer td { padding: 0; border: 0; }
    letting one lead push the call-order columns off screen */
 .c-email { max-width: 190px; }
 .c-email a { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* A guessed address is styled as provisional on purpose — she should be able
+   to tell at a glance which ones were actually published. */
+.c-email a.guessed {
+  color: var(--warm);
+  border-bottom: 1px dashed var(--warm);
+  text-decoration: none;
+}
+.c-email a.formlink { color: var(--muted); font-style: italic; }
+
+/* An engaged filter should be visible at a glance — otherwise a short list
+   looks like a small territory rather than a narrow filter. */
+.filters select.active-filter {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 550;
+}
+
+/* website column: the domain alone, capped so it never crowds the phone */
+.c-site { max-width: 170px; }
+.c-site a { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

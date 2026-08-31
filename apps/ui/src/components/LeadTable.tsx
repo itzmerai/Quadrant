@@ -7,6 +7,7 @@ import {
   type CallStatus,
   type Lead,
 } from '@quadrant/core';
+import { ExternalLink } from './ExternalLink';
 
 interface Props {
   leads: Lead[];
@@ -14,6 +15,8 @@ interface Props {
   /** Whether this box has ever been scanned - changes what an empty table means. */
   scanned: boolean;
   zipCount: number;
+  /** Export follows what she is looking at, not the whole box. */
+  onVisibleChange?: (visible: Lead[]) => void;
 }
 
 const STATUSES: CallStatus[] = [
@@ -33,6 +36,54 @@ const STATUS_LABEL: Record<CallStatus, string> = {
 };
 
 /**
+ * Published beats guessed: a published address is safe to send to, a guessed
+ * one can bounce, and bounces cost sender reputation. The distinction stays
+ * visible on the row itself even though only these cuts are filterable.
+ */
+type ContactFilter = 'all' | 'email-any' | 'email-published' | 'site-any';
+
+const CONTACT_OPTIONS: Array<{ value: ContactFilter; label: string }> = [
+  { value: 'all', label: 'Any contact' },
+  { value: 'email-any', label: 'Has email' },
+  { value: 'email-published', label: 'Published email only' },
+  { value: 'site-any', label: 'Has website' },
+];
+
+/**
+ * The default row is what she reads while dialling: who, what number, who to
+ * ask for, and whether they are open. Email and website are only in the way
+ * until she is actually looking for them, so each column appears only when
+ * its filter is on. Both are always in the expanded row and in the CSV.
+ */
+const EMAIL_FILTERS = new Set<ContactFilter>(['email-any', 'email-published']);
+const SITE_FILTERS = new Set<ContactFilter>(['site-any']);
+
+/** A domain reads better in a column than a full URL. */
+function prettyDomain(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return url
+      .replace(/^https?:\/\//, '')
+      .replace(/^www\./, '')
+      .split('/')[0] ?? url;
+  }
+}
+
+function matchesContact(l: Lead, f: ContactFilter): boolean {
+  switch (f) {
+    case 'email-any':
+      return !!l.email;
+    case 'email-published':
+      return !!l.email && l.emailConfidence === 'published';
+    case 'site-any':
+      return !!l.website;
+    default:
+      return true;
+  }
+}
+
+/**
  * A metro box returns thousands of practices. Rendering them all put roughly
  * 56,000 nodes in the DOM and froze the window, so only the rows actually on
  * screen are mounted and the rest are represented by two spacer rows.
@@ -43,10 +94,11 @@ const ROW_H = 46;
 const EXPANDED_H = 220;
 const OVERSCAN = 8;
 
-export function LeadTable({ leads, onPatch, scanned, zipCount }: Props) {
+export function LeadTable({ leads, onPatch, scanned, zipCount, onVisibleChange }: Props) {
   const [query, setQuery] = useState('');
   const [group, setGroup] = useState('all');
   const [status, setStatus] = useState<'all' | CallStatus>('all');
+  const [contact, setContact] = useState<ContactFilter>('all');
   const [openHoursOnly, setOpenHoursOnly] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
 
@@ -86,6 +138,7 @@ export function LeadTable({ leads, onPatch, scanned, zipCount }: Props) {
     return leads.filter((l) => {
       if (group !== 'all' && l.specialtyGroup !== group) return false;
       if (status !== 'all' && l.callStatus !== status) return false;
+      if (!matchesContact(l, contact)) return false;
       if (openHoursOnly && isOfficeHours(l.timezone, now) !== true) return false;
       if (!q) return true;
       return (
@@ -96,7 +149,23 @@ export function LeadTable({ leads, onPatch, scanned, zipCount }: Props) {
         (l.phone ?? '').includes(q)
       );
     });
-  }, [leads, query, group, status, openHoursOnly, now]);
+  }, [leads, query, group, status, contact, openHoursOnly, now]);
+
+  /** Live counts, so the filter says what it will actually give her. */
+  const contactCounts = useMemo(() => {
+    let email = 0;
+    let published = 0;
+    for (const l of leads) {
+      if (!l.email) continue;
+      email++;
+      if (l.emailConfidence !== 'guessed') published++;
+    }
+    return { email, published, site: leads.filter((l) => l.website).length };
+  }, [leads]);
+
+  useEffect(() => {
+    onVisibleChange?.(filtered);
+  }, [filtered, onVisibleChange]);
 
   const groupsPresent = useMemo(() => {
     const set = new Set(leads.map((l) => l.specialtyGroup));
@@ -140,6 +209,11 @@ export function LeadTable({ leads, onPatch, scanned, zipCount }: Props) {
 
   const windowed = filtered.slice(first, last);
 
+  const showEmail = EMAIL_FILTERS.has(contact);
+  const showSite = SITE_FILTERS.has(contact);
+  // Score, Practice, Phone, Ask for, Their time, Specialty, Status
+  const columnCount = 7 + (showEmail ? 1 : 0) + (showSite ? 1 : 0);
+
   return (
     <div className="leads">
       <div className="filters">
@@ -166,6 +240,25 @@ export function LeadTable({ leads, onPatch, scanned, zipCount }: Props) {
             <option key={s} value={s}>{STATUS_LABEL[s]}</option>
           ))}
         </select>
+        <select
+          value={contact}
+          onChange={(e) => setContact(e.target.value as ContactFilter)}
+          aria-label="Contact channel"
+          className={contact === 'all' ? '' : 'active-filter'}
+        >
+          {CONTACT_OPTIONS.map((o) => {
+            const n =
+              o.value === 'email-any' ? contactCounts.email
+              : o.value === 'email-published' ? contactCounts.published
+              : o.value === 'site-any' ? contactCounts.site
+              : null;
+            return (
+              <option key={o.value} value={o.value}>
+                {o.label}{n === null ? '' : ' (' + n.toLocaleString() + ')'}
+              </option>
+            );
+          })}
+        </select>
         <label className="toggle">
           <input
             type="checkbox"
@@ -190,7 +283,8 @@ export function LeadTable({ leads, onPatch, scanned, zipCount }: Props) {
               <th className="c-score">Score</th>
               <th>Practice</th>
               <th>Phone</th>
-              <th>Email</th>
+              {showSite && <th>Website</th>}
+              {showEmail && <th>Email</th>}
               <th>Ask for</th>
               <th>Their time</th>
               <th>Specialty</th>
@@ -228,13 +322,38 @@ export function LeadTable({ leads, onPatch, scanned, zipCount }: Props) {
                         ? <a href={'tel:' + l.phone.replace(/\D/g, '')}>{l.phone}</a>
                         : <span className="muted">—</span>}
                     </td>
+                    {showSite && (
+                      <td className="c-site">
+                        {l.website ? (
+                          <ExternalLink href={l.website} title={l.website}>
+                            {prettyDomain(l.website)}
+                          </ExternalLink>
+                        ) : (
+                          <span className="muted">—</span>
+                        )}
+                      </td>
+                    )}
+                    {showEmail && (
                     <td className="c-email">
                       {l.email ? (
-                        <a href={'mailto:' + l.email} title={l.email}>{l.email}</a>
+                        <a
+                          href={'mailto:' + l.email}
+                          className={l.emailConfidence === 'guessed' ? 'guessed' : ''}
+                          title={
+                            l.emailConfidence === 'guessed'
+                              ? l.email + ' — not published on their site. The domain accepts mail, but this exact mailbox is unconfirmed.'
+                              : l.email + ' — published on their website'
+                          }
+                        >
+                          {l.email}
+                        </a>
+                      ) : l.contactFormUrl ? (
+                        <ExternalLink href={l.contactFormUrl} className="formlink">contact form</ExternalLink>
                       ) : (
                         <span className="muted">—</span>
                       )}
                     </td>
+                    )}
                     <td>
                       {l.contactName ? (
                         <>
@@ -275,7 +394,7 @@ export function LeadTable({ leads, onPatch, scanned, zipCount }: Props) {
 
                   {isOpen && (
                     <tr className="detail-row">
-                      <td colSpan={8}>
+                      <td colSpan={columnCount}>
                         <div className="lead-detail">
                           <div className="ld-col">
                             <h4>Why this lead</h4>
@@ -297,7 +416,7 @@ export function LeadTable({ leads, onPatch, scanned, zipCount }: Props) {
                               {l.website && (
                                 <>
                                   <dt>Website</dt>
-                                  <dd><a href={l.website} target="_blank" rel="noreferrer">{l.website}</a></dd>
+                                  <dd><ExternalLink href={l.website}>{l.website}</ExternalLink></dd>
                                 </>
                               )}
                               {l.email && <><dt>Email</dt><dd>{l.email}</dd></>}

@@ -36,6 +36,8 @@ export default function App() {
   const [territories, setTerritories] = useState<Territory[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [leads, setLeads] = useState<Lead[]>([]);
+  // What the table is actually showing, so Export matches the screen.
+  const [visible, setVisible] = useState<Lead[]>([]);
 
   const [drawing, setDrawing] = useState(false);
   const [pendingBox, setPendingBox] = useState<BBox | null>(null);
@@ -205,7 +207,8 @@ export default function App() {
 
   function exportCsv() {
     if (!selected || !leads.length) return;
-    const blob = new Blob([leadsToCsv(leads)], { type: 'text/csv;charset=utf-8' });
+    const rows = visible.length ? visible : leads;
+    const blob = new Blob([leadsToCsv(rows)], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -307,6 +310,9 @@ export default function App() {
                 )}
                 <button className="btn" onClick={exportCsv} disabled={!leads.length}>
                   Export CSV
+                  {visible.length > 0 && visible.length !== leads.length && (
+                    <span className="btn-sub">{visible.length.toLocaleString()} shown</span>
+                  )}
                 </button>
                 <button className="btn ghost" onClick={() => deleteTerritory(selected)} disabled={scanning}>
                   Delete
@@ -344,6 +350,7 @@ export default function App() {
               onPatch={patchLead}
               scanned={selected.lastScanAt !== null}
               zipCount={zipsInBBox(zipIndex, selected.bbox).length}
+              onVisibleChange={setVisible}
             />
           </div>
         )}
