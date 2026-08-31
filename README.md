@@ -102,7 +102,19 @@ npm install
 npm run dev        # browser at localhost:5173 — works fully, no Rust needed
 npm run desktop    # the real Tauri app (first Rust build takes a few minutes)
 npm run typecheck
+npm test
 ```
+
+Building the Windows installer, which is what a `v*` tag runs in CI:
+
+```bash
+npm run desktop:build    # -> apps/desktop/target/release/bundle/nsis/
+```
+
+Run this from the **repo root**, not from `apps/desktop` — that directory has no
+`package.json`, and the `tauri` binary is only on PATH inside an npm script.
+Worth running once locally before tagging a release: a tag that fails in CI has
+to be deleted along with its draft release before you can retry.
 
 Headless, no UI — useful for testing the engine:
 
