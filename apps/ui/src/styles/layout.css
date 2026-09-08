@@ -84,7 +84,7 @@
 }
 .map-reopen:hover { background: var(--accent-soft); color: var(--accent); }
 
-/* ---- status pills (R5): all eight states distinct ---- */
+/* ---- status pills (R5): all six states distinct ---- */
 
 .pill {
   appearance: none; -webkit-appearance: none;
@@ -100,6 +100,7 @@
 
 .pill.s-new            { background: var(--sunken);      color: var(--muted);  border-color: var(--line); }
 .pill.s-no-answer      { background: var(--cool-soft);   color: var(--cool);   border-color: var(--cool); }
+.pill.s-reached-out    { background: var(--sent-soft);   color: var(--sent);   border-color: var(--sent); }
 .pill.s-follow-up      { background: var(--warm-soft);   color: var(--warm);   border-color: var(--warm); }
 .pill.s-interested     { background: var(--good);        color: #fff;          border-color: var(--good); }
 .pill.s-do-not-contact { background: var(--danger);      color: #fff;          border-color: var(--danger); }
@@ -303,3 +304,76 @@
 .terr-pop-item:hover { background: var(--sunken); }
 .terr-pop-item.danger { color: var(--danger); }
 .terr-pop-item.danger:hover { background: var(--hot-soft); }
+
+/* ---- call note history (R7-R10, R16) ---- */
+
+.notes-col { display: flex; flex-direction: column; min-height: 0; }
+
+/*
+ * The virtualized table reserves a fixed EXPANDED_H (220px) for an expanded
+ * row, so the detail can never be allowed to grow with the data: a lead with
+ * twenty notes - exactly the lead this feature exists for - would push every
+ * spacer calculation below it out by hundreds of pixels. The history scrolls
+ * inside itself, and the detail as a whole is capped as a backstop.
+ */
+.lead-detail { max-height: 220px; overflow-y: auto; }
+
+/* A call history reads as a list, not a stack of cards - the note text is the
+   content, and the date and controls sit under it quietly. Bounded so a
+   well-worked lead cannot outgrow the expanded row the table reserves. */
+.notes-list {
+  max-height: 104px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin: 0 0 8px;
+  padding: 0 0 0 18px;
+  list-style: disc;
+}
+
+.note {
+  display: list-item;
+  margin: 0 0 7px;
+  padding: 0;
+}
+.note::marker { color: var(--muted); }
+.note:last-child { margin-bottom: 0; }
+
+.note-meta { display: flex; align-items: center; gap: 8px; margin-top: 1px; }
+.note-date { font-size: 10.5px; color: var(--muted); }
+.note-text {
+  margin: 0; font-size: 12.5px; line-height: 1.5;
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.note-none { margin: 0 0 8px; font-size: 12.5px; }
+
+.note-actions { display: flex; align-items: center; gap: 6px; }
+.note-new .note-actions { margin-top: 6px; }
+
+.note-btn {
+  font: inherit; font-size: 11px; line-height: 1;
+  padding: 4px 8px; border-radius: var(--radius);
+  border: 1px solid transparent; background: none;
+  color: var(--muted); cursor: pointer;
+}
+/* Tighter under a bullet, where these sit beside the date rather than in a
+   card header - the note text is what should carry the row's weight. */
+.note-meta .note-btn { padding: 1px 5px; }
+.note-btn:hover { color: var(--ink); background: var(--surface); border-color: var(--line); }
+.note-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.note-btn.danger:hover { color: var(--hot); border-color: var(--hot); }
+.note-btn.go {
+  color: #fff; background: var(--accent); border-color: var(--accent); font-weight: 550;
+}
+.note-btn.go:hover { color: #fff; background: var(--accent); filter: brightness(1.08); }
+.note-btn.add {
+  align-self: flex-start;
+  border-color: var(--line); color: var(--ink-2);
+}
+
+.notes-col .note-input {
+  width: 100%; min-height: 56px; resize: vertical;
+  font: inherit; font-size: 12.5px;
+  padding: 7px 9px; border-radius: var(--radius);
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+}
+.note-hint { font-size: 10.5px; color: var(--muted); }

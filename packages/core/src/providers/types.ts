@@ -21,6 +21,12 @@ export interface SearchResult {
   truncated: string[];
   queriesRun: number;
   warnings: string[];
+  /**
+   * The user pressed Stop, so `leads` is only what had been found by then.
+   * A stop is reported here rather than thrown: throwing is what skips the
+   * save, and the save is the whole point of keeping partial results.
+   */
+  cancelled: boolean;
 }
 
 /**

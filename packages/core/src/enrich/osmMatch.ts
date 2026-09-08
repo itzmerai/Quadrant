@@ -1,5 +1,6 @@
 import type { BBox, Lead, ProgressFn } from '../types';
 import type { Http, CancelToken } from '../http';
+import { isCancelled } from '../http';
 import { toOverpass } from '../bbox';
 
 /**
@@ -108,6 +109,18 @@ export async function fetchOsmPlaces(
   const data = await http.postForm<OverpassResponse>(
     ENDPOINT,
     'data=' + encodeURIComponent(query),
+    // Overpass is the single longest request in a scan, so it is the one a
+    // Stop is most likely to land in the middle of.
+    //
+    // It also needs its own budget. The query above asks the server for up to
+    // 90 seconds while the client is built with 25, so on a metro-sized box
+    // this request could never succeed - enrichment quietly returned nothing
+    // on exactly the boxes where it matters most, and three doomed 25s
+    // attempts were most of what a stuck Stop used to feel like. Give it room
+    // to finish, and keep one retry: rate-limiting is the failure this
+    // endpoint actually has, and 429 is what a retry is for. Safe only
+    // because the signal above now aborts it on demand.
+    { signal: cancel?.signal, timeoutMs: 95_000, retries: 1 },
   );
 
   const out: OsmPlace[] = [];
@@ -141,6 +154,8 @@ export interface OsmMatchResult {
   leads: Lead[];
   osmPlaces: number;
   matched: number;
+  /** The user pressed Stop; `leads` is untouched or only partly enriched. */
+  cancelled: boolean;
 }
 
 const MIN_SIMILARITY = 0.4;
@@ -167,9 +182,17 @@ export async function enrichFromOsm(
   let places: OsmPlace[];
   try {
     places = await fetchOsmPlaces(bbox, http, cancel);
-  } catch {
+  } catch (err) {
+    /**
+     * Cancellation is deliberately excluded from this swallow, and it must
+     * stay excluded. A bare catch reads as intentional here - Overpass really
+     * is allowed to fail - but a stop swallowed into "no places" is reported
+     * to the user as a rate-limit warning she never caused (R14) and lets the
+     * remaining stages keep running after she asked them not to.
+     */
+    if (isCancelled(err)) return { leads, osmPlaces: 0, matched: 0, cancelled: true };
     // Overpass is rate-limited and flaky; enrichment is allowed to fail.
-    return { leads, osmPlaces: 0, matched: 0 };
+    return { leads, osmPlaces: 0, matched: 0, cancelled: false };
   }
 
   let matched = 0;
@@ -208,5 +231,5 @@ export async function enrichFromOsm(
     };
   });
 
-  return { leads: out, osmPlaces: places.length, matched };
+  return { leads: out, osmPlaces: places.length, matched, cancelled: false };
 }

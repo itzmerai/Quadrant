@@ -82,11 +82,11 @@ export function NameBoxDialog({ bbox, zipCount, defaultSpecialties, onCancel, on
             <div className="blocker" role="alert">
               <strong>This box is outside the United States.</strong>
               <p>
-                Quadrant searches the US federal provider registry, which is the only
+                Quadrant searches the U.S. federal provider registry, which is the only
                 source that carries a phone number and a named contact for every
                 practice. A box here would come back empty.
               </p>
-              <p>Close this and draw a box over a US city instead.</p>
+              <p>Close this and draw a box over a U.S. city instead.</p>
             </div>
           )}
 

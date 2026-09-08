@@ -1,5 +1,32 @@
 import { normalizeCallStatus, type Lead, type Territory } from '../types';
+import { normalizeCallNotes } from '../notes';
 import type { FsAdapter, MergeReport, TerritoryStore } from './types';
+
+/**
+ * A stored lead brought up to the current shape.
+ *
+ * Every path that reads leads.json runs this, not just `getLeads` (KTD6):
+ * `mergeLeads` and `updateLead` both read the file raw, so a rescan or a
+ * status change against a box still holding the old single-note shape would
+ * carry `callNotes` as undefined and drop the note with no error at all.
+ *
+ * The legacy `callNote` is stripped here, which means the next write of any
+ * kind persists the migration and removes the second source of truth (KTD11).
+ */
+function normalizeLead(stored: Lead): Lead {
+  return {
+    ...stored,
+    // Cleared rather than destructured away: this runs once per lead on every
+    // read, and destructure-then-spread copies every field twice. `undefined`
+    // is dropped by JSON.stringify, so the file ends up the same shape - the
+    // merge path a hundred lines below already relies on exactly that.
+    callNote: undefined,
+    // Statuses from earlier builds resolve to their replacement rather than
+    // rendering as an unknown pill.
+    callStatus: normalizeCallStatus(stored.callStatus),
+    callNotes: normalizeCallNotes(stored.callNotes, stored),
+  };
+}
 
 /**
  * One folder per named box. The folder name is the territory slug, so the
@@ -35,6 +62,17 @@ export function uniqueSlug(name: string, taken: Set<string>): string {
 const territoryPath = (id: string) => ROOT + '/' + id + '/territory.json';
 const leadsPath = (id: string) => ROOT + '/' + id + '/leads.json';
 
+/**
+ * When a box was last worked, by either kind of run.
+ *
+ * Sorting on `lastScanAt` alone sank a box whose only scan was stopped back to
+ * creation order - the one she is most likely to come back to. ISO-8601 strings
+ * compare lexicographically, so the newest stamp is just the largest.
+ */
+function latestStamp(t: Territory): string {
+  return [t.lastPartialScanAt, t.lastScanAt, t.createdAt].filter(Boolean).sort().pop()!;
+}
+
 export function createFileStore(fs: FsAdapter): TerritoryStore {
   async function readJson<T>(path: string, fallback: T): Promise<T> {
     try {
@@ -57,8 +95,8 @@ export function createFileStore(fs: FsAdapter): TerritoryStore {
       }
       // Most recently scanned first; never-scanned boxes sort by creation.
       return out.sort((a, b) => {
-        const at = a.lastScanAt ?? a.createdAt;
-        const bt = b.lastScanAt ?? b.createdAt;
+        const at = latestStamp(a);
+        const bt = latestStamp(b);
         return bt.localeCompare(at);
       });
     },
@@ -78,9 +116,7 @@ export function createFileStore(fs: FsAdapter): TerritoryStore {
 
     async getLeads(territoryId) {
       const leads = await readJson<Lead[]>(leadsPath(territoryId), []);
-      // Statuses from earlier builds resolve to their replacement rather than
-      // rendering as an unknown pill.
-      return leads.map((l) => ({ ...l, callStatus: normalizeCallStatus(l.callStatus) }));
+      return leads.map(normalizeLead);
     },
 
     async saveLeads(territoryId, leads) {
@@ -89,7 +125,9 @@ export function createFileStore(fs: FsAdapter): TerritoryStore {
     },
 
     async mergeLeads(territoryId, incoming): Promise<MergeReport> {
-      const existing = await readJson<Lead[]>(leadsPath(territoryId), []);
+      // Migrated before anything is compared: a stored lead in the old shape
+      // has to reach the preserve list below already carrying its notes (KTD6).
+      const existing = (await readJson<Lead[]>(leadsPath(territoryId), [])).map(normalizeLead);
       const byId = new Map(existing.map((l) => [l.id, l]));
 
       let added = 0;
@@ -108,11 +146,20 @@ export function createFileStore(fs: FsAdapter): TerritoryStore {
         const merged: Lead = {
           ...fresh,
           callStatus: prior.callStatus,
-          callNote: prior.callNote,
+          callNotes: prior.callNotes,
+          // The scan cannot know about the old single field, and `prior` no
+          // longer carries it, so the merge writes the migrated list alone.
+          callNote: undefined,
           lastCalledAt: prior.lastCalledAt,
           // Keep enrichment that the registry cannot supply.
           website: fresh.website ?? prior.website,
           email: fresh.email ?? prior.email,
+          // Without these two a rescan silently relabels a guessed address as
+          // published - the distinction that exists to stop her mailing an
+          // inferred address - and forgets the contact form entirely. The
+          // enrichment fold in scanOutcome.ts already gets this right.
+          emailConfidence: fresh.email ? fresh.emailConfidence : prior.emailConfidence,
+          contactFormUrl: fresh.contactFormUrl ?? prior.contactFormUrl,
           enrichedAt: prior.enrichedAt,
         };
 
@@ -136,7 +183,10 @@ export function createFileStore(fs: FsAdapter): TerritoryStore {
     },
 
     async updateLead(territoryId, leadId, patch) {
-      const leads = await readJson<Lead[]>(leadsPath(territoryId), []);
+      // Same migration as the other two read paths (KTD6). It runs over the
+      // whole file because the whole file is what gets written back, so one
+      // status change persists the migration for every lead in the box.
+      const leads = (await readJson<Lead[]>(leadsPath(territoryId), [])).map(normalizeLead);
       const i = leads.findIndex((l) => l.id === leadId);
       if (i < 0) return null;
       const next = { ...leads[i]!, ...patch };

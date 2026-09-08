@@ -42,6 +42,10 @@
   --warm-soft: #faf1dd;
   --cool: #56626f;
   --cool-soft: #eceff3;
+  /* Violet is the one hue no other family claims, so the "reached out" pill
+     cannot be read as a score, a warning, or a selection. */
+  --sent: #6d3f9c;
+  --sent-soft: #f2eafc;
 
   --good: #12764f;
   --danger: #a5372a;
@@ -74,6 +78,8 @@
     --warm-soft: #2a2214;
     --cool: #8b98a6;
     --cool-soft: #1a222d;
+    --sent: #bd93ee;
+    --sent-soft: #241a33;
 
     --good: #40b187;
     --danger: #e2745c;
@@ -108,6 +114,8 @@
   --warm-soft: #2a2214;
   --cool: #8b98a6;
   --cool-soft: #1a222d;
+  --sent: #bd93ee;
+  --sent-soft: #241a33;
 
   --good: #40b187;
   --danger: #e2745c;

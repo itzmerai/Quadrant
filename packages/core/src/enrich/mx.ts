@@ -1,4 +1,5 @@
-import type { Http } from '../http';
+import type { CancelToken, Http } from '../http';
+import { isCancelled } from '../http';
 
 /**
  * Does this domain accept mail at all?
@@ -36,7 +37,11 @@ export function domainOf(url: string): string | null {
   }
 }
 
-export async function acceptsMail(domain: string, http: Http): Promise<boolean> {
+export async function acceptsMail(
+  domain: string,
+  http: Http,
+  cancel?: CancelToken,
+): Promise<boolean> {
   const key = domain.toLowerCase();
   const hit = cache.get(key);
   if (hit !== undefined) return hit;
@@ -46,12 +51,20 @@ export async function acceptsMail(domain: string, http: Http): Promise<boolean> 
     const res = await http.request(
       DOH + '?name=' + encodeURIComponent(key) + '&type=MX',
       { headers: { Accept: 'application/dns-json' } },
+      { signal: cancel?.signal },
     );
     if (res.ok) {
       const data = (await res.json()) as DohResponse;
       ok = (data.Answer ?? []).some((a) => a.type === MX_TYPE && !!a.data);
     }
-  } catch {
+  } catch (err) {
+    /**
+     * Rethrow rather than cache. A stop says nothing about the domain, and
+     * this cache outlives the scan: caching `false` here would mark every
+     * domain in flight when Stop was pressed as refusing mail for the rest of
+     * the session, so the next scan silently skips guessing for them.
+     */
+    if (isCancelled(err)) throw err;
     // A failed lookup is not proof of anything; treat it as "do not guess".
     ok = false;
   }

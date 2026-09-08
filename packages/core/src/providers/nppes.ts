@@ -1,7 +1,7 @@
 import type { Lead } from '../types';
 import type { RegistryProvider, SearchRequest, SearchResult } from './types';
 import { zipsInBBox, type ZipRow } from '../zip/resolver';
-import { mapLimit } from '../http';
+import { isCancelled, mapLimit } from '../http';
 import { timezoneFor } from '../timezone';
 import {
   SPECIALTY_GROUPS,
@@ -212,7 +212,9 @@ async function fetchZip(
       skip,
     });
 
-    const data = await req.http.getJson<NppesResponse>(url);
+    // The signal is what makes Stop land on a request already in flight;
+    // `throwIfCancelled` above only ever catches a stop between pages.
+    const data = await req.http.getJson<NppesResponse>(url, { signal: req.cancel?.signal });
     queries++;
 
     if (data.Errors?.length) break;
@@ -238,7 +240,7 @@ export const nppesProvider: RegistryProvider = {
   country: 'US',
   coverage: 'excellent',
   coverageNote:
-    'US government registry. Practice phone on nearly every record, plus a named ' +
+    'U.S. government registry. Practice phone on nearly every record, plus a named ' +
     'decision-maker with a direct line. No API key needed.',
   requiresKey: false,
 
@@ -261,9 +263,9 @@ export const nppesProvider: RegistryProvider = {
     const zipRows = zipsInBBox(req.zipIndex, req.bbox);
     if (zipRows.length === 0) {
       warnings.push(
-        'No US ZIP codes fall inside this box. NPPES only covers the United States.',
+        'No U.S. ZIP codes fall inside this box. NPPES only covers the United States.',
       );
-      return { leads: [], truncated: [], queriesRun: 0, warnings };
+      return { leads: [], truncated: [], queriesRun: 0, warnings, cancelled: false };
     }
 
     const zipLookup = new Map(zipRows.map((r) => [r.zip, r]));
@@ -273,33 +275,51 @@ export const nppesProvider: RegistryProvider = {
     let queriesRun = 0;
     const byId = new Map<string, Lead>();
 
-    await mapLimit(zips, CONCURRENCY, async (zip) => {
-      req.cancel?.throwIfCancelled();
-      try {
-        const { records, truncated, queries } = await fetchZip(zip, req);
-        queriesRun += queries;
-        if (truncated) truncatedZips.push(zip);
+    let cancelled = false;
+    try {
+      await mapLimit(zips, CONCURRENCY, async (zip) => {
+        req.cancel?.throwIfCancelled();
+        try {
+          const { records, truncated, queries } = await fetchZip(zip, req);
+          queriesRun += queries;
+          if (truncated) truncatedZips.push(zip);
 
-        for (const rec of records) {
-          const lead = toLead(rec, req.territoryId, wantedGroups, zipLookup, fetchedAt);
-          // Practices spanning several ZIPs can repeat; NPI is the identity.
-          if (lead && !byId.has(lead.id)) byId.set(lead.id, lead);
+          for (const rec of records) {
+            const lead = toLead(rec, req.territoryId, wantedGroups, zipLookup, fetchedAt);
+            // Practices spanning several ZIPs can repeat; NPI is the identity.
+            if (lead && !byId.has(lead.id)) byId.set(lead.id, lead);
+          }
+        } catch (err) {
+          /**
+           * A stop is not a ZIP failure. `fetchZip` cancels from inside this
+           * try, so without this the user gets "ZIP 85001 failed: Scan
+           * cancelled" once per concurrent worker - warnings the cancellation
+           * invented, about ZIPs that were fine (R14).
+           */
+          if (isCancelled(err)) throw err;
+          warnings.push('ZIP ' + zip + ' failed: ' + String(err));
+        } finally {
+          done++;
+          req.onProgress?.({
+            phase: 'querying',
+            message: 'Searching ZIP ' + zip + ' (' + done + ' of ' + zips.length + ')',
+            current: done,
+            total: zips.length,
+            leadsFound: byId.size,
+          });
         }
-      } catch (err) {
-        warnings.push('ZIP ' + zip + ' failed: ' + String(err));
-      } finally {
-        done++;
-        req.onProgress?.({
-          phase: 'querying',
-          message: 'Searching ZIP ' + zip + ' (' + done + ' of ' + zips.length + ')',
-          current: done,
-          total: zips.length,
-          leadsFound: byId.size,
-        });
-      }
-    });
+      });
+    } catch (err) {
+      // The boundary where a thrown stop becomes a returned outcome (KTD2).
+      // `byId` already holds every lead the finished ZIPs contributed, and
+      // those are exactly what the caller must be allowed to save (R2).
+      if (!isCancelled(err)) throw err;
+      cancelled = true;
+    }
 
-    if (truncatedZips.length) {
+    // A stopped scan never reached the rest of the ZIPs, so "may be
+    // incomplete" is not news and the list is not the user's doing.
+    if (truncatedZips.length && !cancelled) {
       warnings.push(
         truncatedZips.length +
           ' ZIP code(s) hit the registry result ceiling and may be incomplete: ' +
@@ -310,7 +330,7 @@ export const nppesProvider: RegistryProvider = {
 
     const leads = [...byId.values()].sort((a, b) => b.score - a.score);
 
-    return { leads, truncated: truncatedZips, queriesRun, warnings };
+    return { leads, truncated: truncatedZips, queriesRun, warnings, cancelled };
   },
 };
 

@@ -196,13 +196,13 @@ export function MapPicker({ territories, selectedId, drawing, onDrawn, onSelect,
       <div ref={hostRef} className="map-canvas" />
       {drawing && (
         <div className="map-hint" role="status">
-          <strong>Press and drag</strong> to draw your box — over a US city, since
-          the provider registry is US-only
+          <strong>Press and drag</strong> to draw your box — over a U.S. city, since
+          the provider registry is U.S.-only
         </div>
       )}
       <div className="map-controls">
         <button className="map-btn" onClick={goHome} title="Jump back to the United States">
-          Show US
+          Show U.S.
         </button>
         <button className="map-btn" onClick={onClose} title="Hide the map and give the space to the lead list">
           Hide map

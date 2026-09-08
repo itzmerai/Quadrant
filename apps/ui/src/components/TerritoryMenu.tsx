@@ -6,6 +6,13 @@ interface Props {
   theme: 'light' | 'dark';
   onPick: (colorKey: string) => void;
   onDelete: () => void;
+  /**
+   * True while a scan or hunt is running for this box. Delete has to be gated
+   * here too, not only on the main button: a delete issued from this menu
+   * mid-scan raced the run's own writes, which recreated the folder and every
+   * lead in it moments after she removed it.
+   */
+  busy?: boolean;
 }
 
 /**
@@ -16,7 +23,7 @@ interface Props {
  * popover would be clipped by its `overflow` — the same trap that made the
  * status pill flicker.
  */
-export function TerritoryMenu({ colorKey, theme, onPick, onDelete }: Props) {
+export function TerritoryMenu({ colorKey, theme, onPick, onDelete, busy }: Props) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const btnRef = useRef<HTMLButtonElement | null>(null);
@@ -109,6 +116,8 @@ export function TerritoryMenu({ colorKey, theme, onPick, onDelete }: Props) {
           <button
             className="terr-pop-item danger"
             role="menuitem"
+            disabled={busy}
+            title={busy ? 'Stop the run before deleting this box' : undefined}
             onClick={() => {
               setOpen(false);
               onDelete();
