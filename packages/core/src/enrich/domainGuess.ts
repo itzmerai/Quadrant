@@ -1,6 +1,6 @@
 import type { Lead, ProgressFn } from '../types';
 import type { Http, CancelToken } from '../http';
-import { mapLimit } from '../http';
+import { isCancelled, mapLimit } from '../http';
 
 /**
  * Finds a practice's website by guessing its domain.
@@ -14,6 +14,13 @@ import { mapLimit } from '../http';
  * website to a lead, so every hit must be confirmed against something only the
  * real practice would have on its page.
  */
+
+/**
+ * A guess is a probe, not a read: several candidate domains are tried per lead
+ * at high concurrency, so one unresponsive host must not hold a worker for the
+ * client's full default budget the way a real page fetch would.
+ */
+const PROBE_TIMEOUT = 8_000;
 
 const STOP = new Set([
   'the', 'and', 'of', 'at', 'for', 'a', 'an', 'inc', 'llc', 'pllc', 'pc', 'pa',
@@ -119,11 +126,14 @@ export interface DomainGuessResult {
   attempted: number;
   resolved: number;
   rejected: number;
+  /** The user pressed Stop; `leads` keeps every website confirmed so far (R3). */
+  cancelled: boolean;
 }
 
 async function guessOne(
   lead: Lead,
   http: Http,
+  cancel?: CancelToken,
 ): Promise<{ lead: Lead; resolved: boolean; rejected: boolean }> {
   const candidates = candidateDomains(lead.practiceName);
   let rejected = false;
@@ -131,13 +141,21 @@ async function guessOne(
   for (const domain of candidates) {
     const url = 'https://' + domain;
     try {
-      const html = await http.getText(url);
+      const html = await http.getText(url, {
+        signal: cancel?.signal,
+        // A guess is a cheap probe; it must not hold a worker like a real read.
+        timeoutMs: PROBE_TIMEOUT,
+        retries: 0,
+      });
       if (pageBelongsTo(html, lead)) {
         return { lead: { ...lead, website: url, enrichedAt: new Date().toISOString() }, resolved: true, rejected };
       }
       // It resolved but belongs to somebody else. Never attach it.
       rejected = true;
-    } catch {
+    } catch (err) {
+      // A dead candidate domain is the normal case here; a stop is not, and
+      // trying the next five candidates after one is work she cancelled.
+      if (isCancelled(err)) throw err;
       // No such host, or it refused us. Try the next candidate.
     }
   }
@@ -156,37 +174,47 @@ export async function guessWebsites(
   cancel?: CancelToken,
 ): Promise<DomainGuessResult> {
   const targets = leads.filter((l) => !l.website);
-  if (!targets.length) return { leads, attempted: 0, resolved: 0, rejected: 0 };
+  if (!targets.length) return { leads, attempted: 0, resolved: 0, rejected: 0, cancelled: false };
 
   const byId = new Map(leads.map((l) => [l.id, l]));
   let done = 0;
   let resolved = 0;
   let rejected = 0;
+  let cancelled = false;
 
-  await mapLimit(targets, CONCURRENCY, async (lead) => {
-    cancel?.throwIfCancelled();
-    try {
-      const r = await guessOne(lead, http);
-      if (r.resolved) resolved++;
-      if (r.rejected) rejected++;
-      byId.set(lead.id, r.lead);
-    } catch {
-      /* leave the lead alone */
-    } finally {
-      done++;
-      if (done % 10 === 0 || done === targets.length) {
-        onProgress?.({
-          phase: 'enriching',
-          message:
-            'Guessing website domains (' + done + ' of ' + targets.length +
-            ', found ' + resolved + ')',
-          current: done,
-          total: targets.length,
-          leadsFound: leads.length,
-        });
+  try {
+    await mapLimit(targets, CONCURRENCY, async (lead) => {
+      cancel?.throwIfCancelled();
+      try {
+        const r = await guessOne(lead, http, cancel);
+        if (r.resolved) resolved++;
+        if (r.rejected) rejected++;
+        byId.set(lead.id, r.lead);
+      } catch (err) {
+        // One lead we could not place is fine; a stop is not.
+        if (isCancelled(err)) throw err;
+        /* leave the lead alone */
+      } finally {
+        done++;
+        if (done % 10 === 0 || done === targets.length) {
+          onProgress?.({
+            phase: 'enriching',
+            message:
+              'Guessing website domains (' + done + ' of ' + targets.length +
+              ', found ' + resolved + ')',
+            current: done,
+            total: targets.length,
+            leadsFound: leads.length,
+          });
+        }
       }
-    }
-  });
+    });
+  } catch (err) {
+    // KTD2: return what was confirmed before the stop rather than throwing it
+    // away. `byId` still holds every website already attached (R3).
+    if (!isCancelled(err)) throw err;
+    cancelled = true;
+  }
 
-  return { leads: [...byId.values()], attempted: targets.length, resolved, rejected };
+  return { leads: [...byId.values()], attempted: targets.length, resolved, rejected, cancelled };
 }

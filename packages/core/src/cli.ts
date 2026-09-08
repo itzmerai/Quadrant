@@ -63,7 +63,7 @@ async function main() {
   const zips = zipsInBBox(zipIndex, bbox);
   console.log('ZIPs      : ' + zips.length + ' inside the box');
   if (!zips.length) {
-    console.error('\nNo US ZIP codes in this box. NPPES covers the United States only.');
+    console.error('\nNo U.S. ZIP codes in this box. NPPES covers the United States only.');
     process.exit(1);
   }
   console.log('');

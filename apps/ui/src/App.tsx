@@ -8,6 +8,10 @@ import {
   runScan,
   guessWebsites,
   crawlForEmails,
+  deriveEmailHuntResult,
+  deriveScanResult,
+  mergeEnrichment,
+  territoryScanState,
   suggestFilename,
   zipsInBBox,
   territoryHex,
@@ -121,6 +125,7 @@ export default function App() {
       specialties,
       createdAt: new Date().toISOString(),
       lastScanAt: null,
+      lastPartialScanAt: null,
       leadCount: 0,
     };
 
@@ -151,28 +156,47 @@ export default function App() {
         enrichWebsites: true,
       });
 
+      // A stop is not a reason to skip the save - it is the reason the save
+      // matters (R2). The merge runs exactly as it does on a completed scan.
       const report = await store.mergeLeads(territory.id, result.leads);
+      const derived = deriveScanResult({
+        cancelled: result.cancelled,
+        report,
+        territory,
+        at: new Date().toISOString(),
+      });
+      /**
+       * Re-read rather than writing back the snapshot this run started with.
+       * A scan takes minutes and `territory` is frozen at its beginning, so
+       * saving it reverted a colour she picked while it ran - and could
+       * recreate a box she deleted mid-scan, leads and all.
+       */
+      const current = await store.getTerritory(territory.id);
+      if (!current) return; // deleted while the scan ran; it stays deleted
       const updated: Territory = {
-        ...territory,
-        lastScanAt: new Date().toISOString(),
-        leadCount: report.total,
+        ...current,
+        ...derived.scanState,
+        leadCount: derived.leadCount,
       };
       await store.saveTerritory(updated);
 
       setTerritories(await store.listTerritories());
       setLeads(await store.getLeads(territory.id));
       setWarnings(result.warnings);
+      // Last, and only once both writes above have landed. This phase is what
+      // re-enables Delete and Rescan, so what is on disk has to be complete
+      // before it flips (KTD9, R5).
       setProgress({
-        phase: 'done',
-        message:
-          report.added + ' new, ' + report.updated + ' updated, ' + report.total + ' total',
-        current: 1, total: 1, leadsFound: report.total,
+        phase: derived.phase,
+        message: derived.message,
+        current: 1, total: 1, leadsFound: derived.leadCount,
       });
     } catch (err) {
-      const cancelled = cancel.cancelled;
+      // `runScan` returns a stop rather than throwing one (KTD2), so anything
+      // arriving here is a genuine failure and is reported as one.
       setProgress({
-        phase: cancelled ? 'cancelled' : 'error',
-        message: cancelled ? 'Scan cancelled' : String(err),
+        phase: 'error',
+        message: String(err),
         current: 0, total: 0, leadsFound: 0,
       });
     } finally {
@@ -187,31 +211,62 @@ export default function App() {
    */
   async function findEmails(territory: Territory) {
     if (!store) return;
+    // One long operation at a time. Guarding on the token rather than the
+    // rendered phase closes the window below, where no phase existed yet.
+    if (cancelRef.current) return;
     setWarnings([]);
     const cancel = new CancelToken();
     cancelRef.current = cancel;
+    /**
+     * Announce before the first long await, the way the scan does. Without
+     * this the hunt ran with no phase at all until the enrichers reported -
+     * and domain guessing only reports every tenth lead - so Stop was not
+     * rendered, Delete stayed live, and a second run could start over the top.
+     */
+    setProgress({
+      phase: 'enriching',
+      message: 'Starting email hunt',
+      current: 0,
+      total: leads.length,
+      leadsFound: leads.length,
+    });
 
-    const before = leads.filter((l) => l.email).length;
+    
     try {
       const http = await getHttp();
       const guessed = await guessWebsites(leads, http, setProgress, cancel);
       const crawled = await crawlForEmails(guessed.leads, http, setProgress, cancel);
 
-      await store.saveLeads(territory.id, crawled.leads);
-      setLeads(crawled.leads);
+      // Fold onto what is on disk right now rather than writing back the
+      // snapshot this hunt started from. It runs for minutes, and a status or
+      // note she set while it ran must survive the save (R15).
+      // Baseline from the same read the fold uses, not from the React snapshot
+      // this run started with - mixing the two could report a negative gain.
+      const stored = await store.getLeads(territory.id);
+      const before = stored.filter((l) => l.email).length;
+      const merged = mergeEnrichment(stored, crawled.leads);
+      await store.saveLeads(territory.id, merged);
+      setLeads(merged);
 
-      const gained = crawled.leads.filter((l) => l.email).length - before;
+      // Saved first, reported second, and branched on the returned flag - the
+      // enrichers hand a stop back as a value now, so a catch would never see
+      // one and the hunt would claim it finished (R3, R14).
+      const derived = deriveEmailHuntResult({
+        cancelled: guessed.cancelled || crawled.cancelled,
+        gained: merged.filter((l) => l.email).length - before,
+        resolved: guessed.resolved,
+        rejected: guessed.rejected,
+        leadCount: merged.length,
+      });
       setProgress({
-        phase: 'done',
-        message:
-          'Found ' + gained + ' more emails · ' + guessed.resolved + ' websites guessed' +
-          (guessed.rejected ? ' · ' + guessed.rejected + ' rejected as someone else' : ''),
-        current: 1, total: 1, leadsFound: crawled.leads.length,
+        phase: derived.phase,
+        message: derived.message,
+        current: 1, total: 1, leadsFound: derived.leadCount,
       });
     } catch (err) {
       setProgress({
-        phase: cancel.cancelled ? 'cancelled' : 'error',
-        message: cancel.cancelled ? 'Stopped — emails found so far are saved' : String(err),
+        phase: 'error',
+        message: String(err),
         current: 0, total: 0, leadsFound: leads.length,
       });
     } finally {
@@ -233,7 +288,10 @@ export default function App() {
 
   async function deleteTerritory(t: Territory) {
     if (!store) return;
-    if (!confirm('Delete "' + t.name + '" and all ' + t.leadCount + ' of its leads?')) return;
+    // Counted from disk, not from the cached field: a prompt about deleting
+    // data must not understate what it is about to remove.
+    const actual = (await store.getLeads(t.id)).length;
+    if (!confirm('Delete "' + t.name + '" and all ' + actual + ' of its leads?')) return;
     await store.deleteTerritory(t.id);
     const list = await store.listTerritories();
     setTerritories(list);
@@ -310,9 +368,13 @@ export default function App() {
                 <span className="terr-name">{t.name}</span>
                 <span className="terr-meta">
                   {t.leadCount} leads
-                  {t.lastScanAt
-                    ? ' · scanned ' + new Date(t.lastScanAt).toLocaleDateString()
-                    : ' · never scanned'}
+                  {/* Three states, three readings. "412 leads · never scanned"
+                      is what the old two-state check printed after a stop. */}
+                  {territoryScanState(t) === 'complete'
+                    ? ' · scanned ' + new Date(t.lastScanAt!).toLocaleDateString()
+                    : territoryScanState(t) === 'partial'
+                      ? ' · partial scan'
+                      : ' · never scanned'}
                 </span>
               </button>
               <TerritoryMenu
@@ -320,6 +382,7 @@ export default function App() {
                 theme={resolvedTheme}
                 onPick={(c) => void setTerritoryColor(t, c)}
                 onDelete={() => void deleteTerritory(t)}
+                busy={scanning && t.id === selectedId}
               />
             </li>
           ))}
@@ -391,7 +454,9 @@ export default function App() {
                   </button>
                 ) : (
                   <button className="btn primary" onClick={() => startScan(selected)}>
-                    {selected.lastScanAt ? 'Rescan' : 'Find leads'}
+                    {/* Rescan is the recovery path after a stop, so a partial
+                        box has to offer it - there is no Resume. */}
+                    {territoryScanState(selected) === 'never' ? 'Find leads' : 'Rescan'}
                   </button>
                 )}
                 <button className="btn" onClick={exportCsv} disabled={!leads.length}>
@@ -434,7 +499,7 @@ export default function App() {
             <LeadTable
               leads={leads}
               onPatch={patchLead}
-              scanned={selected.lastScanAt !== null}
+              scanState={territoryScanState(selected)}
               zipCount={selectedZipCount}
               onVisibleChange={setVisible}
             />

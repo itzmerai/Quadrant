@@ -1,11 +1,16 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import {
   SPECIALTY_GROUPS,
+  addNote,
+  deleteNote,
+  editNote,
   isOfficeHours,
   localTimeAt,
   scoreBand,
   type CallStatus,
   type Lead,
+  type Note,
+  type TerritoryScanState,
 } from '@quadrant/core';
 import { ExternalLink } from './ExternalLink';
 import { LeadCards } from './LeadCards';
@@ -16,8 +21,13 @@ import { StatusPill, STATUSES, STATUS_LABEL } from './StatusPill';
 interface Props {
   leads: Lead[];
   onPatch: (leadId: string, patch: Partial<Lead>) => void;
-  /** Whether this box has ever been scanned - changes what an empty table means. */
-  scanned: boolean;
+  /**
+   * How far this box has been searched - three states, not two, because an
+   * empty table means something different in each. A stop that found nothing
+   * did not 'come back empty'; it was interrupted, and saying otherwise sends
+   * her off to redraw a box that was fine.
+   */
+  scanState: TerritoryScanState;
   zipCount: number;
   /** Export follows what she is looking at, not the whole box. */
   onVisibleChange?: (visible: Lead[]) => void;
@@ -83,7 +93,166 @@ const ROW_H = 46;
 const EXPANDED_H = 220;
 const OVERSCAN = 8;
 
-export function LeadTable({ leads, onPatch, scanned, zipCount, onVisibleChange }: Props) {
+/** A note's own date, short enough to sit on one line beside its controls. */
+function noteDate(iso: string): string {
+  const d = new Date(iso);
+  // A note migrated from a record with neither a call date nor a fetch date
+  // says so rather than showing "Invalid Date" or today (KTD11).
+  if (!iso || Number.isNaN(d.getTime())) return 'date unknown';
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+/** Ctrl/Cmd+Enter submits; plain Enter is a newline, because notes are call detail. */
+function isSubmitChord(e: KeyboardEvent): boolean {
+  return e.key === 'Enter' && (e.ctrlKey || e.metaKey);
+}
+
+/**
+ * The running note history for one lead (R7-R10, R16).
+ *
+ * All the list arithmetic is in core's notes.ts (KTD5); this owns nothing but
+ * which box is open. Mounted with key={lead.id} so a half-typed note can never
+ * carry across to a different practice.
+ */
+function LeadNotes({ lead, onPatch }: { lead: Lead; onPatch: Props['onPatch'] }) {
+  const notes: Note[] = lead.callNotes ?? [];
+
+  // Open on an empty history so the common case is one click, not two; every
+  // later note goes through the explicit control (R8).
+  const [adding, setAdding] = useState(notes.length === 0);
+  const [draft, setDraft] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState('');
+
+  const addRef = useRef<HTMLTextAreaElement | null>(null);
+  const editRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // preventScroll: the row is already where she left it, and a focus-driven
+  // scroll inside the virtualized table jumps her somewhere else entirely.
+  useEffect(() => {
+    if (adding) addRef.current?.focus({ preventScroll: true });
+  }, [adding]);
+  useEffect(() => {
+    if (editingId) editRef.current?.focus({ preventScroll: true });
+  }, [editingId]);
+
+  function commitAdd() {
+    const next = addNote(notes, draft);
+    if (next !== notes) onPatch(lead.id, { callNotes: next });
+    setDraft('');
+    setAdding(false);
+  }
+
+  function commitEdit(id: string) {
+    onPatch(lead.id, { callNotes: editNote(notes, id, editDraft) });
+    setEditingId(null);
+    setEditDraft('');
+  }
+
+  function remove(n: Note) {
+    // Same guard as deleting a box: a note is written work, and there is no
+    // undo behind it.
+    const preview = n.text.length > 60 ? n.text.slice(0, 60) + '…' : n.text;
+    if (!confirm('Delete this note?\n\n' + preview)) return;
+    onPatch(lead.id, { callNotes: deleteNote(notes, n.id) });
+    if (editingId === n.id) setEditingId(null);
+  }
+
+  return (
+    <div className="ld-col grow notes-col">
+      <h4>Call notes</h4>
+
+      {notes.length > 0 ? (
+        <ul className="notes-list">
+          {notes.map((n) => {
+            const when = noteDate(n.createdAt);
+            return (
+              <li key={n.id} className="note">
+                {editingId === n.id ? (
+                  <>
+                    <textarea
+                      ref={editRef}
+                      className="note-input"
+                      value={editDraft}
+                      aria-label={'Edit note from ' + when}
+                      onChange={(e) => setEditDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (isSubmitChord(e)) { e.preventDefault(); commitEdit(n.id); }
+                        if (e.key === 'Escape') { e.preventDefault(); setEditingId(null); }
+                      }}
+                    />
+                    <div className="note-actions">
+                      <button className="note-btn go" onClick={() => commitEdit(n.id)}>Save</button>
+                      <button className="note-btn" onClick={() => setEditingId(null)}>Cancel</button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p className="note-text">{n.text}</p>
+                    <div className="note-meta">
+                      {/* An empty dateTime is invalid HTML, and a migrated note
+                          with no sourceable date legitimately has one. */}
+                      {n.createdAt ? (
+                        <time className="note-date tnum" dateTime={n.createdAt}>{when}</time>
+                      ) : (
+                        <span className="note-date">{when}</span>
+                      )}
+                      <span className="note-actions">
+                        <button
+                          className="note-btn"
+                          aria-label={'Edit note from ' + when}
+                          onClick={() => { setEditingId(n.id); setEditDraft(n.text); }}
+                        >Edit</button>
+                        <button
+                          className="note-btn danger"
+                          aria-label={'Delete note from ' + when}
+                          onClick={() => remove(n)}
+                        >Delete</button>
+                      </span>
+                    </div>
+                  </>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        !adding && <p className="muted note-none">No notes on this lead yet.</p>
+      )}
+
+      {adding ? (
+        <div className="note-new">
+          <textarea
+            ref={addRef}
+            className="note-input"
+            value={draft}
+            placeholder="What happened on the call?"
+            aria-label="New note"
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (isSubmitChord(e)) { e.preventDefault(); commitAdd(); }
+              if (e.key === 'Escape') { e.preventDefault(); setDraft(''); setAdding(false); }
+            }}
+          />
+          <div className="note-actions">
+            <button className="note-btn go" onClick={commitAdd}>Add note</button>
+            {notes.length > 0 && (
+              <button
+                className="note-btn"
+                onClick={() => { setDraft(''); setAdding(false); }}
+              >Cancel</button>
+            )}
+            <span className="note-hint">Ctrl+Enter</span>
+          </div>
+        </div>
+      ) : (
+        <button className="note-btn add" onClick={() => setAdding(true)}>+ Add note</button>
+      )}
+    </div>
+  );
+}
+
+export function LeadTable({ leads, onPatch, scanState, zipCount, onVisibleChange }: Props) {
   const [query, setQuery] = useState('');
   const [group, setGroup] = useState('all');
   const [status, setStatus] = useState<'all' | CallStatus>('all');
@@ -165,12 +334,17 @@ export function LeadTable({ leads, onPatch, scanned, zipCount, onVisibleChange }
   if (!leads.length) {
     return (
       <div className="table-empty">
-        {scanned ? (
+        {scanState === 'partial' ? (
+          <>
+            <p><strong>The scan was stopped before it found anything.</strong></p>
+            <p className="muted">Press Rescan to search this box again.</p>
+          </>
+        ) : scanState === 'complete' ? (
           <>
             <p><strong>This box came back empty.</strong></p>
             <p className="muted">
               {zipCount === 0
-                ? 'No US ZIP codes fall inside it — the registry covers the United States only.'
+                ? 'No U.S. ZIP codes fall inside it — the registry covers the United States only.'
                 : 'The ' + zipCount + ' ZIP codes here hold no practices in the specialties you picked. Try adding specialties, or drawing a larger box.'}
             </p>
           </>
@@ -440,14 +614,7 @@ export function LeadTable({ leads, onPatch, scanned, zipCount, onVisibleChange }
                               <dt>NPI</dt><dd className="tnum">{l.sourceId}</dd>
                             </dl>
                           </div>
-                          <div className="ld-col grow">
-                            <h4>Call notes</h4>
-                            <textarea
-                              defaultValue={l.callNote ?? ''}
-                              placeholder="What happened on the call?"
-                              onBlur={(e) => onPatch(l.id, { callNote: e.target.value })}
-                            />
-                          </div>
+                          <LeadNotes key={l.id} lead={l} onPatch={onPatch} />
                         </div>
                       </td>
                     </tr>

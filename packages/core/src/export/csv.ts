@@ -1,5 +1,6 @@
 import type { Lead, Territory } from '../types';
 import { localTimeAt } from '../timezone';
+import { normalizeCallNotes } from '../notes';
 import { scoreBand } from '../score';
 
 /** RFC 4180 quoting. Excel is unforgiving about the details. */
@@ -42,7 +43,12 @@ export const CALL_SHEET_COLUMNS: CsvColumn[] = [
   { header: 'Record Updated', get: (l) => l.recordUpdatedAt },
   { header: 'Why This Lead', get: (l) => l.scoreReasons.join('; ') },
   { header: 'Call Status', get: (l) => l.callStatus },
-  { header: 'Notes', get: (l) => l.callNote ?? '' },
+  // Every note, oldest first, in one cell (KTD7). The export is her record of
+  // what was said, so it does not truncate to the most recent note. `cell()`
+  // already quotes anything holding a newline, so no new escaping is needed.
+  // Normalising here means a lead that never passed through the store still
+  // exports its pre-list note rather than an empty column.
+  { header: 'Notes', get: (l) => normalizeCallNotes(l.callNotes, l).map((n) => n.text).join('\n') },
   { header: 'NPI', get: (l) => l.sourceId },
   { header: 'Source', get: (l) => l.source },
 ];
